@@ -150,10 +150,7 @@ package object funda {
       }
   }
 
-
-// object API extends fda_
-
-  /** methods to run an user defined function*/
+  /** methods to run an user defined function on FDAPipeLine*/
   object FDATask { //作业节点工作方法
     /**
       * returns state of next worknode. using fs2 Handle of Pull object,
