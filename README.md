@@ -13,3 +13,69 @@ val stream = source.filter{r => r.year > "1999"}.take(3).appendTask(showRecord)
 stream.startRun
 ```
 as demostrated above, we can compose stream anyway we want before **startRun**
+###producing source with strong-typed rows  
+*FunDA* begins streaming by loading from database through *Slick*. *Slick* as a typical *FRM* returns collection with tuples as result of running a query. To facilitate data accessing we must transform tuples into strong-typed rows like case classes. The following code snippet demostrates how *FunDA* produces data source with strong-typed rows:  
+
+```
+// aqmQuery.result returns Seq[(String,String,String,String)]
+  val aqmQuery = aqmraw.map {r => (r.year,r.state,r.county,r.value)}
+// user designed strong typed resultset type. must extend FDAROW
+  case class TypedRow(year: String, state: String, county: String, value: String) extends FDAROW
+// strong typed resultset conversion function. declared implicit to remind during compilation
+  implicit def toTypedRow(row: (String,String,String,String)): TypedRow =
+    TypedRow(row._1,row._2,row._3,row._4)  
+
+// loader to read from database and convert result collection to strong typed collection
+  val viewLoader = FDAViewLoader(slick.driver.H2Driver)(toTypedRow _)
+  val dataSeq = viewLoader.fda_typedRows(aqmQuery.result)(db).toSeq
+// turn Seq collection into FunDA stream with strong-typed rows
+  val aqmStream =  fda_staticSource(dataSeq)()()  
+
+// strong typed source is also possible with Slick data streaming
+  val streamLoader = FDAStreamLoader(slick.driver.H2Driver)(toTypedRow _)      
+  val source = streamLoader.fda_typedStream(aqmQuery.result)(db)(10.seconds,512,512)()()
+  
+    
+```   
+as demonstrated above, both static collections and dynamic data-stream can be transform into strong-typed-row sources.  
+
+###Control data flow
+*FunDA* stream flow of rows is controled inside user-defined-tasks, in which a row is received from upstream and zero or one or more rows could be passed downstream. This means additional new rows could be created and passed downstream inside these user-defined-tasks as well as skip a row when passing no row at current loop. And user could also halt stream by passing an end-of-stream signal downstream inside these user-defined-tasks. Code samples are as follows:  
+
+```
+   user-defined-task type is defined as follows:
+   type FDAUserTask[ROW] = (ROW) => (Option[List[ROW]])
+    /* user define function to be performed at a FDAWorkNode
+    * given a row from upstream, return Option[List[ROW]] as follows:
+    *    fda_skip  -> Some(Nil)           : skip sending the current row
+    *    fda_next  -> Some(List(r1,r2...)): send r1,r2... downstream
+    *    fda_break -> None                : halt stream, end of process
+    * @tparam ROW   type of row
+    */
+  
+// a example of user-defined-task  
+  def dancing: FDAUserTask[FDAROW] = row => {
+    row match {
+      case qmr: TypedRow =>
+        qmr.year match {
+          case a if a < 1960 =>
+          // pass downstream untouched
+           fda_next(qmr)
+          case b if b < 1970 => 
+          // transform row
+           fda_next(qmr.copy(year = 1970))
+          case c if c < 1980 =>
+          // pass alone with a new row. TypedRow is a case class
+           fda_next(List(qmr,TypedRow(qmr.stare,"countyQQ",0.3,1980)))
+          case d if d < 2000 =>
+          // do not process this row
+           fda_skip
+          case _ =>
+          // stop stream
+           fda_break    
+        }
+      // encounter unknown row type, break out  
+      case _ => fda_break
+    }
+  }
+```
