@@ -1,4 +1,5 @@
-#FunDA (Functional Data Access)
+#FunDA (Functional Data Access)  
+
 *FunDA* is a functional database access library designed to supplement *FRM* (Functional-Relational-Mapper) tools like *Slick*.  
 While *FRM* tools brings type safe language-integrated-query and flexible query composition as well as powerful functional programming paradigm to it's users, the main focus is on data object access and thus short on ability for data persistence support such as data row traversal operations that is so common in *ORM*. This and a brand new functional programming style also make many OOP programmers from the *ORM* world using *FRM* quite uncomfortable or even somewhat awkward. On top of introducing back the familiar recordset operation support, *FunDA* also adds functionalities to support explicit parallel data processing as well as a simple user-defined programming model to lower requirements for functional programming skills such that with little getting-used-to a traditional *OOP* programmer could handle *FunDA* with ease.  
 *FunDA* is anologous to *scalaz-streams-fs2*. It is like a workflow pipe with a sequence of any number of work-nodes where user-defined data processing tasks are executed. *FunDA* adopts fs2 to implement a forward-only stream flow of data row or query commands. User-defined tasks at a work-node can intercept rows and process data or run query commands and then perhaps pass some transformed row to the next work-node. Parallel processing abilities are achieved through non-determinism handling of fs2.  
@@ -11,7 +12,8 @@ streamSource.appendTask(transformData).appendTask(runActionQuery).appendTask(sho
 ```
 where streamSource is a *FunDA* stream produced by loading from database. And transformData, runActionQuery and showResults are user-defined-tasks each resposible to achieve some distinctive effect and when composed in a specific order togather they perform a much complexed bigger job. From the semantics of the *FunDA* program above we can make a wild guess that user-defined-task transformData would transform data to query actions and pass them down to runActionQuery for execution.  
 
-##The Principles
+##The Principles  
+
 *FunDA*'s workflow *FDAPipeLine* is a *fs2-stream* and therefore is a *free-monad* type. It is highly composible:  
 
 ```
@@ -23,6 +25,7 @@ stream.startRun
 ```
 as demostrated above, we can compose stream anyway we want before **startRun**
 ###producing source with strong-typed rows  
+  
 *FunDA* begins streaming by loading from database through *Slick*. *Slick* as a typical *FRM* returns collection with tuples as result of running a query. To facilitate data accessing we must transform tuples into strong-typed rows like case classes. The following code snippet demostrates how *FunDA* produces data source with strong-typed rows:  
 
 ```
@@ -48,7 +51,8 @@ as demostrated above, we can compose stream anyway we want before **startRun**
 ```   
 as demonstrated above, both static collections and dynamic data-stream can be transform into strong-typed-row sources.  
 
-###Control data flow
+###Control data flow  
+
 *FunDA* stream flow of rows is controled inside user-defined-tasks, in which a row is received from upstream and zero or one or more rows could be passed downstream. This means additional new rows could be created and passed downstream inside these user-defined-tasks as well as skip a row when passing no row at current loop. And user could also halt stream by passing an end-of-stream signal downstream inside these user-defined-tasks. Code samples are as follows:  
 
 ```
@@ -90,6 +94,7 @@ as demonstrated above, both static collections and dynamic data-stream can be tr
 ```
 
 ###defining user-defined-task  
+  
 As a functional stream, It seems that some of the data access and processing in *FunDA* could be achieved in some pure functional ways such as:  
 
 ```
