@@ -4,7 +4,7 @@ import com.bayakala.funda._
 import api._
 import com.bayakala.funda.samples._
 import scala.language.implicitConversions
-import scala.concurrent.duration._
+
 
 object StrongTypedSource extends App {
 

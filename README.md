@@ -6,7 +6,7 @@ While *FRM* tools brings type safe language-integrated-query and flexible query 
 A typical *FunDA* program is as follows:  
 
 ```
-val streamSource = streamLoader.fda_typedStream(albumsInfo.result)(db)(10.minutes, 512, 128)()()
+val streamSource = streamLoader.fda_typedStream(albumsInfo.result)(db)(512, 128)()()
 
 streamSource.appendTask(transformData).appendTask(runActionQuery).appendTask(showResults).startRun
 ```
@@ -18,7 +18,7 @@ where streamSource is a *FunDA* stream produced by loading from database. And tr
 
 ```
 val streamLoader = FDAStreamLoader(slick.driver.H2Driver)(toTypedRow _)      
-val source = streamLoader.fda_typedStream(aqmQuery.result)(db)(10.seconds,512,512)()()
+val source = streamLoader.fda_typedStream(aqmQuery.result)(db)(512,512)()()
 val stream = source.filter{r => r.year > "1999"}.take(3).appendTask(showRecord)
 
 stream.startRun
@@ -45,7 +45,7 @@ as demostrated above, we can compose stream anyway we want before **startRun**
 
 // strong typed source is also possible with Slick data streaming
   val streamLoader = FDAStreamLoader(slick.driver.H2Driver)(toTypedRow _)      
-  val source = streamLoader.fda_typedStream(aqmQuery.result)(db)(10.seconds,512,512)()()
+  val source = streamLoader.fda_typedStream(aqmQuery.result)(db)(512,512)()()
   
     
 ```   

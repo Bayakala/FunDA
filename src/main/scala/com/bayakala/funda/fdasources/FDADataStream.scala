@@ -27,11 +27,8 @@ trait FDADataStream {
       * also provide stream element conversion from SOURCE type to TARGET type
       * @example {{{
       *    val streamLoader = FDAStreamLoader(slick.driver.H2Driver)(toTypedRow _)
-      *    val streamSource = streamLoader.fda_typedStream(aqmQuery.result)(db)(
-      *         10.seconds,512,512)()()
-      *
-      *    val safeStreamSource = streamLoader.fda_typedStream(aqmQuery.result)(db)(
-      *         10.seconds,512,512){
+      *    val streamSource = streamLoader.fda_typedStream(aqmQuery.result)(db)(512,512)()()
+      *    val safeStreamSource = streamLoader.fda_typedStream(aqmQuery.result)(db)(512,512){
       *            case e: Exception => fda_appendRow(FDAErrorRow(new Exception(e)))
       *        }(println("the end finally!"))
       * }}}
@@ -74,11 +71,8 @@ trait FDADataStream {
       * provide facade for error handler and finalizer to support exception and cleanup handling
       * @example {{{
       *    val streamLoader = FDAStreamLoader(slick.driver.H2Driver)()
-      *    val streamSource = streamLoader.fda_plainStream(aqmQuery.result)(db)(
-      *         10.seconds,512,512)()()
-      *
-      *    val safeStreamSource = streamLoader.fda_plainStream(aqmQuery.result)(db)(
-      *         10.seconds,512,512){
+      *    val streamSource = streamLoader.fda_plainStream(aqmQuery.result)(db)(512,512)()()
+      *    val safeStreamSource = streamLoader.fda_plainStream(aqmQuery.result)(db)(512,512){
       *            case e: Exception => fda_appendRow(FDAErrorRow(new Exception(e)))
       *        }(println("the end finally!"))
       * }}}
