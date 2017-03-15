@@ -30,7 +30,8 @@ object SlickModels {
   val AQMRawQuery = TableQuery[AQMRawTable]
 
 
-  case class AQMRPTModel(mid: Int
+  case class AQMRPTModel(rid: Long
+                         , mid: Int
                          , state: String
                          , county: String
                          , year: Int
@@ -38,6 +39,7 @@ object SlickModels {
                          , total: Int)
 
   class AQMRPTTable(tag: Tag) extends Table[AQMRPTModel](tag, "AQMRPT") {
+    def rid = column[Long]("ROWID",O.AutoInc,O.PrimaryKey)
     def mid = column[Int]("MEASUREID")
     def state = column[String]("STATENAME")
     def county = column[String]("COUNTYNAME")
@@ -45,7 +47,7 @@ object SlickModels {
     def value = column[Int]("VALUE")
     def total = column[Int]("TOTAL")
 
-    def * = (mid,state,county,year,value,total) <> (AQMRPTModel.tupled, AQMRPTModel.unapply)
+    def * = (rid,mid,state,county,year,value,total) <> (AQMRPTModel.tupled, AQMRPTModel.unapply)
   }
 
   val AQMRPTQuery = TableQuery[AQMRPTTable]

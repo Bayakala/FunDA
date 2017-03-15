@@ -1,5 +1,5 @@
 package com.bayakala.funda
-
+/*
 /**
   * methods provided to users to operate on a worknode
   */
@@ -87,3 +87,4 @@ package com.bayakala.funda
      object FDAPipes extends FDAPipes
 
   }
+*/

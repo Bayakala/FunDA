@@ -37,10 +37,6 @@ trait FDADataStream {
       * }}}
       * @param action       a Slick DBIOAction to produce query results
       * @param slickDB      Slick database object
-      * @param maxInterval  max time wait on iteratee to consume of next element
-      *                     exceeding presumed streaming failure or completion
-      *                     use 0.milli to represent infinity
-      *                     inform enumerator to release its resources
       * @param fetchSize    number of rows cached during database read
       * @param queSize      size of queque used by iteratee as cache to pass elements to fs2 stream
       * @param errhandler   error handler callback
@@ -52,7 +48,7 @@ trait FDADataStream {
       */
     def fda_typedStream(action: DBIOAction[Iterable[SOURCE],Streaming[SOURCE],Effect.Read])(
       slickDB: Database)(
-      maxInterval: FiniteDuration, fetchSize: Int, queSize: Int)(
+      fetchSize: Int, queSize: Int)(
       errhandler: Throwable => FDAPipeLine[TARGET] = null)(
       finalizer: => Unit = ())(
       implicit convert: SOURCE => TARGET): FDAPipeLine[TARGET] = {
@@ -62,7 +58,7 @@ trait FDADataStream {
       val enumerator = streams.IterateeStreams.publisherToEnumerator(publisher)
 
       val s = Stream.eval(async.boundedQueue[Task,Option[SOURCE]](queSize)).flatMap { q =>
-        Task { Iteratee.flatten(enumerator |>> pushData(q,maxInterval)).run }.unsafeRunAsyncFuture()
+        Task { Iteratee.flatten(enumerator |>> pushData(q)).run }.unsafeRunAsyncFuture()
         pipe.unNoneTerminate(q.dequeue).map {row => convert(row)}
       }
       if (errhandler != null)
@@ -88,9 +84,6 @@ trait FDADataStream {
       * }}}
       * @param action       a Slick DBIOAction to produce query results
       * @param slickDB      Slick database object
-      * @param maxInterval  max time wait on iteratee to consume of next element
-      *                     exceeding presumed streaming failure or completion
-      *                     inform enumerator to release its resources
       * @param fetchSize    number of rows cached during database read
       * @param queSize      size of queque used by iteratee as cache to pass elements to fs2 stream
       * @param errhandler   error handler callback
@@ -99,7 +92,7 @@ trait FDADataStream {
       */
     def fda_plainStream(action: DBIOAction[Iterable[SOURCE],Streaming[SOURCE],Effect.Read])(
         slickDB: Database)(
-                           maxInterval: FiniteDuration, fetchSize: Int, queSize: Int)(
+                           fetchSize: Int, queSize: Int)(
                            errhandler: Throwable => FDAPipeLine[SOURCE] = null)(
                            finalizer: => Unit = ()): FDAPipeLine[SOURCE] = {
       val disableAutocommit = SimpleDBIO(_.connection.setAutoCommit(false))
@@ -108,7 +101,7 @@ trait FDADataStream {
       val enumerator = streams.IterateeStreams.publisherToEnumerator(publisher)
 
       val s = Stream.eval(async.boundedQueue[Task,Option[SOURCE]](queSize)).flatMap { q =>
-        Task { Iteratee.flatten(enumerator |>> pushData(q,maxInterval)).run }.unsafeRunAsyncFuture()
+        Task { Iteratee.flatten(enumerator |>> pushData(q)).run }.unsafeRunAsyncFuture()
         pipe.unNoneTerminate(q.dequeue)
       }
       if (errhandler != null)
@@ -121,39 +114,18 @@ trait FDADataStream {
       * consume input from enumerator by pushing each element into q queque
       * end and produce error when enqueque could not be completed in timeout
       * @param q          queque for cache purpose
-      * @param timeout    time to wait for completion of enqueque before error exit
       * @tparam R         stream element type
       * @return           iteratee in new state
       */
-    private def pushData[R](q: async.mutable.Queue[Task,Option[R]], timeout: FiniteDuration): Iteratee[R,Unit] = Cont {
-      case Input.EOF
-        => {
-          try {
-            if (timeout == 0.milli)
-              q.enqueue1(None).unsafeRun
-            else
-              q.enqueue1(None).unsafeRunFor(timeout)
-            Done((), Input.Empty)
-          } catch { case err: Throwable =>
-              q.enqueue1(None).unsafeRun
-              Error(err.getMessage,Input.Empty)
-          }
-        }
-      case Input.Empty
-        => pushData(q,timeout)
-      case Input.El(e)
-        => {
-          try {
-            if (timeout == 0.milli)
-              q.enqueue1(Some(e)).unsafeRun
-            else
-              q.enqueue1(Some(e)).unsafeRunFor(timeout)
-            pushData(q, timeout)
-          } catch {case err: Throwable =>
-            q.enqueue1(None).unsafeRun
-            Error(err.getMessage,Input.Empty)
-          }
-        }
+    private def pushData[R](q: async.mutable.Queue[Task,Option[R]]): Iteratee[R,Unit] = Cont {
+      case Input.EOF   =>
+        q.enqueue1(None).unsafeRun
+        Done((), Input.Empty)
+      case Input.Empty => pushData(q)
+      case Input.El(e) =>
+        q.enqueue1(Some(e)).unsafeRun
+        pushData(q)
+
     }
 
   }
