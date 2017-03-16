@@ -41,26 +41,20 @@ trait FDADataView {
     * produce a static view source from a Seq[ROW] collection using famous 'bracket'
     * provide facade to error handling and cleanup
     * @example {{{
-    *    val source = fda_staticSource(dataSeq)()()
+    *    val source = fda_staticSource(dataSeq)()
     *
-    *     val safeSource = fda_staticSource(dataSeq){
-    *         case e: Exception => fda_appendRow(FDAErrorRow(new Exception(e)))
-    *        }(println("the end finally!"))
+    *     val safeSource = fda_staticSource(dataSeq)(
+    *        println("the end finally!"))
     * }}}
     * @param acquirer       the Seq[ROW] collection
-    * @param errhandler     error handle callback
     * @param finalizer      cleanup callback
     * @tparam ROW           type of row
     * @return               a new stream
     */
   def fda_staticSource[ROW](acquirer: => Seq[ROW])(
-                            errhandler: Throwable => FDAPipeLine[ROW] = null)(
                             finalizer: => Unit = ()): FDAPipeLine[ROW] = {
      val s = Stream.bracket(Task.delay(acquirer))(r => streamSeq(r), r => Task.delay((): Unit))
-     if (errhandler != null)
-       s.onError(errhandler).onFinalize(Task.delay(finalizer))
-     else
-       s.onFinalize(Task.delay(finalizer))
+     s.onFinalize(Task.delay(finalizer))
     }
 
   }

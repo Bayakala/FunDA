@@ -27,16 +27,14 @@ trait FDADataStream {
       * also provide stream element conversion from SOURCE type to TARGET type
       * @example {{{
       *    val streamLoader = FDAStreamLoader(slick.driver.H2Driver)(toTypedRow _)
-      *    val streamSource = streamLoader.fda_typedStream(aqmQuery.result)(db)(512,512)()()
-      *    val safeStreamSource = streamLoader.fda_typedStream(aqmQuery.result)(db)(512,512){
-      *            case e: Exception => fda_appendRow(FDAErrorRow(new Exception(e)))
-      *        }(println("the end finally!"))
+      *    val streamSource = streamLoader.fda_typedStream(aqmQuery.result)(db)(512,512)()
+      *    val safeStreamSource = streamLoader.fda_typedStream(aqmQuery.result)(db)(512,512)(
+      *        println("the end finally!"))
       * }}}
       * @param action       a Slick DBIOAction to produce query results
       * @param slickDB      Slick database object
       * @param fetchSize    number of rows cached during database read
       * @param queSize      size of queque used by iteratee as cache to pass elements to fs2 stream
-      * @param errhandler   error handler callback
       * @param finalizer    cleanup callback
       * @param convert      just a measure to guarantee conversion function is defined
       *                     when this function is used there has to be a converter defined
@@ -46,7 +44,6 @@ trait FDADataStream {
     def fda_typedStream(action: DBIOAction[Iterable[SOURCE],Streaming[SOURCE],Effect.Read])(
       slickDB: Database)(
       fetchSize: Int, queSize: Int)(
-      errhandler: Throwable => FDAPipeLine[TARGET] = null)(
       finalizer: => Unit = ())(
       implicit convert: SOURCE => TARGET): FDAPipeLine[TARGET] = {
       val disableAutocommit = SimpleDBIO(_.connection.setAutoCommit(false))
@@ -58,10 +55,7 @@ trait FDADataStream {
         Task { Iteratee.flatten(enumerator |>> pushData(q)).run }.unsafeRunAsyncFuture()
         pipe.unNoneTerminate(q.dequeue).map {row => convert(row)}
       }
-      if (errhandler != null)
-        s.onError(errhandler).onFinalize(Task.delay(finalizer))
-      else
-        s.onFinalize(Task.delay(finalizer))
+      s.onFinalize(Task.delay(finalizer))
 
     }
 
@@ -71,23 +65,20 @@ trait FDADataStream {
       * provide facade for error handler and finalizer to support exception and cleanup handling
       * @example {{{
       *    val streamLoader = FDAStreamLoader(slick.driver.H2Driver)()
-      *    val streamSource = streamLoader.fda_plainStream(aqmQuery.result)(db)(512,512)()()
-      *    val safeStreamSource = streamLoader.fda_plainStream(aqmQuery.result)(db)(512,512){
-      *            case e: Exception => fda_appendRow(FDAErrorRow(new Exception(e)))
-      *        }(println("the end finally!"))
+      *    val streamSource = streamLoader.fda_plainStream(aqmQuery.result)(db)(512,512)()
+      *    val safeStreamSource = streamLoader.fda_plainStream(aqmQuery.result)(db)(512,512)(
+      *        println("the end finally!"))
       * }}}
       * @param action       a Slick DBIOAction to produce query results
       * @param slickDB      Slick database object
       * @param fetchSize    number of rows cached during database read
       * @param queSize      size of queque used by iteratee as cache to pass elements to fs2 stream
-      * @param errhandler   error handler callback
       * @param finalizer    cleanup callback
       * @return             a reactive-stream of SOURCE row type elements
       */
     def fda_plainStream(action: DBIOAction[Iterable[SOURCE],Streaming[SOURCE],Effect.Read])(
         slickDB: Database)(
                            fetchSize: Int, queSize: Int)(
-                           errhandler: Throwable => FDAPipeLine[SOURCE] = null)(
                            finalizer: => Unit = ()): FDAPipeLine[SOURCE] = {
       val disableAutocommit = SimpleDBIO(_.connection.setAutoCommit(false))
       val action_ = action.withStatementParameters(fetchSize = fetchSize)
@@ -98,10 +89,7 @@ trait FDADataStream {
         Task { Iteratee.flatten(enumerator |>> pushData(q)).run }.unsafeRunAsyncFuture()
         pipe.unNoneTerminate(q.dequeue)
       }
-      if (errhandler != null)
-        s.onError(errhandler).onFinalize(Task.delay(finalizer))
-      else
-        s.onFinalize(Task.delay(finalizer))
+      s.onFinalize(Task.delay(finalizer))
     }
 
     /**

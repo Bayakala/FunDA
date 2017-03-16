@@ -22,7 +22,7 @@ object StrongTypedSource extends App {
   val viewLoader = FDAViewLoader(slick.driver.H2Driver)(toTypedRow _)
   val dataSeq = viewLoader.fda_typedRows(aqmQuery.result)(db).toSeq
   // turn Seq collection into fs2 stream
-  val aqmStream =  fda_staticSource(dataSeq)()()
+  val aqmStream =  fda_staticSource(dataSeq)()
   // now access fields in the strong typed resultset
   def showRecord: FDAUserTask[FDAROW] = row => {
     row match {
@@ -44,7 +44,7 @@ object StrongTypedSource extends App {
   val stateLoader = FDAViewLoader[String,String](slick.driver.H2Driver)()
   val stateSeq = stateLoader.fda_plainRows(allState.distinct.result)(db).toSeq
   //constructed a Stream[Task,String]
-  val stateStream =  fda_staticSource(stateSeq)()()
+  val stateStream =  fda_staticSource(stateSeq)()
   //strong typed row type. must extend FDAROW
   case class StateRow(state: String) extends FDAROW
   def showState: FDAUserTask[FDAROW] = row => {
@@ -62,11 +62,11 @@ object StrongTypedSource extends App {
 
 
   val streamLoader = FDAStreamLoader(slick.driver.H2Driver)(toTypedRow _)
-  val streamSource = streamLoader.fda_typedStream(aqmQuery.result)(db)(512,512)()()
+  val streamSource = streamLoader.fda_typedStream(aqmQuery.result)(db)(512,512)()
   streamSource.filter{r => r.year > "1999"}.take(3).appendTask(showRecord).startRun
 
   val stateStreamLoader = FDAStreamLoader[String,String](slick.driver.H2Driver)()
-  val stateStreamSource = stateStreamLoader.fda_plainStream(allState.distinct.result)(db)(512,512)()()
+  val stateStreamSource = stateStreamLoader.fda_plainStream(allState.distinct.result)(db)(512,512)()
 
   //first convert to StateRows to turn Stream[Task,FDAROW] typed stream
   stateStreamSource.map{s => StateRow(s)}
