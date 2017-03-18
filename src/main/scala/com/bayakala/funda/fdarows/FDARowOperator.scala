@@ -2,7 +2,7 @@ package com.bayakala.funda.fdarows
 import com.bayakala.funda._
 import scala.concurrent.duration._
 import scala.concurrent.Await
-import slick.driver.JdbcProfile
+import slick.jdbc.JdbcProfile
 
 /**
   * loading of data rows and running of action rows
@@ -13,7 +13,7 @@ trait FDARowOperator {
     * read view, an entire collection of data as result of Slick DBIO action
     * convert collection data type if required
     * run FDAAction row as Slick run(DBIOAction)
-    * @param slickProfile  Slick jdbcprofile such as 'slick.driver.H2Driver'
+    * @param slickProfile  Slick jdbcprofile such as 'slick.jdbc.H2Profile'
     * @param convert       a defined implicit type conversion function.
     *                      from SOURCE type to TARGET type, set to null if not required
     * @tparam SOURCE       source type, result type of DBIOAction, most likely a tuple type
@@ -28,7 +28,7 @@ trait FDARowOperator {
       * run slickAction and apply convert result from collection of SOURCE type
       * to collection of TARGET type
       * @example {{{
-      *       val viewLoader = FDAViewLoader(slick.driver.H2Driver)(toTypedRow _)
+      *       val viewLoader = FDAViewLoader(slick.jdbc.H2Profile)(toTypedRow _)
       *       val dataSeq = viewLoader.fda_typedRows(aqmQuery.result)(db).toSeq
       * }}}
       * @param slickAction   Slick DBIOAction for query data results
@@ -46,7 +46,7 @@ trait FDARowOperator {
     /**
       * load view without type conversion of result collection data type
       * @example {{{
-      *       val viewLoader = FDAViewLoader(slick.driver.H2Driver)()
+      *       val viewLoader = FDAViewLoader(slick.jdbc.H2Profile)()
       *       val dataSeq = viewLoader.fda_plainRows(aqmQuery.result)(db).toSeq
       * }}}
       * @param slickAction   Slick DBIOAction for query data results
@@ -65,10 +65,10 @@ trait FDARowOperator {
     /**
       * FDAViewLoader constructor
       * @example {{{
-      *    val viewLoader = FDAViewLoader(slick.driver.H2Driver)(toTypedRow _)
-      *    val untypedLoader = FDAViewLoader(slick.driver.H2Driver)()
+      *    val viewLoader = FDAViewLoader(slick.jdbc.H2Profile)(toTypedRow _)
+      *    val untypedLoader = FDAViewLoader(slick.jdbc.H2Profile)()
       * }}}
-      * @param slickProfile  Slick jdbcprofile such as 'slick.driver.H2Driver'
+      * @param slickProfile  Slick jdbcprofile such as 'slick.jdbc.H2Profile'
       * @param converter     type conversion function. from SOURCE type to TARGET type
       * @tparam SOURCE       source type, result type of DBIOAction, most likely a tuple type
       * @tparam TARGET       final converted type, most likely a case class type
@@ -81,7 +81,7 @@ trait FDARowOperator {
 
   /**
     * method to run action rows of type FDAAction
-    * @param slickProfile  Slick jdbcprofile such as 'slick.driver.H2Driver'
+    * @param slickProfile  Slick jdbcprofile such as 'slick.jdbc.H2Profile'
     */
   class FDAActionRunner(slickProfile: JdbcProfile) {
 
@@ -103,7 +103,7 @@ trait FDARowOperator {
   object FDAActionRunner {
     /**
       * construct a FDAActionRunner object given slickProfile
-      * @param slickProfile  Slick jdbcprofile such as 'slick.driver.H2Driver'
+      * @param slickProfile  Slick jdbcprofile such as 'slick.jdbc.H2Profile'
       * @return              a new FDAActionRunner object
       */
     def apply(slickProfile: JdbcProfile): FDAActionRunner = new FDAActionRunner(slickProfile)

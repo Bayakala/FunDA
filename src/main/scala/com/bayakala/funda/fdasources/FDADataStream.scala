@@ -3,14 +3,13 @@ package com.bayakala.funda.fdasources
 import fs2._
 import play.api.libs.iteratee._
 import com.bayakala.funda._
-import slick.driver.JdbcProfile
-import scala.concurrent.duration._
+import slick.jdbc.JdbcProfile
 /** stream loader class wrapper */
 trait FDADataStream {
 
   /** running Slick DBIOAction to produce a data stream conforming to reactive-streams api.
     * provide strong typed result conversion if required
-    * @param slickProfile  Slick jdbc profile such as 'slick.driver.H2Driver'
+    * @param slickProfile  Slick jdbc profile such as 'slick.jdbc.H2Profile'
     * @param convert       a defined implicit type conversion function.
     *                      from SOURCE type to TARGET type, set to null if not required
     * @tparam SOURCE       source type, result type of DBIOAction, most likely a tuple type
@@ -26,7 +25,7 @@ trait FDADataStream {
       * provide facade for error handler and finalizer to support exception and cleanup handling
       * also provide stream element conversion from SOURCE type to TARGET type
       * @example {{{
-      *    val streamLoader = FDAStreamLoader(slick.driver.H2Driver)(toTypedRow _)
+      *    val streamLoader = FDAStreamLoader(slick.jdbc.H2Profile)(toTypedRow _)
       *    val streamSource = streamLoader.fda_typedStream(aqmQuery.result)(db)(512,512)()
       *    val safeStreamSource = streamLoader.fda_typedStream(aqmQuery.result)(db)(512,512)(
       *        println("the end finally!"))
@@ -64,7 +63,7 @@ trait FDADataStream {
       * using play-iteratees and fs2 queque to connect to slick data stream publisher
       * provide facade for error handler and finalizer to support exception and cleanup handling
       * @example {{{
-      *    val streamLoader = FDAStreamLoader(slick.driver.H2Driver)()
+      *    val streamLoader = FDAStreamLoader(slick.jdbc.H2Profile)()
       *    val streamSource = streamLoader.fda_plainStream(aqmQuery.result)(db)(512,512)()
       *    val safeStreamSource = streamLoader.fda_plainStream(aqmQuery.result)(db)(512,512)(
       *        println("the end finally!"))
@@ -119,10 +118,10 @@ trait FDADataStream {
     /**
       * constructor for FDAStreamLoader
       * @example {{{
-      *    val streamLoader = FDAStreamLoader(slick.driver.H2Driver)(toTypedRow _)
-      *    val untypedLoader = FDAStreamLoader(slick.driver.H2Driver)()
+      *    val streamLoader = FDAStreamLoader(slick.jdbc.H2Profile)(toTypedRow _)
+      *    val untypedLoader = FDAStreamLoader(slick.jdbc.H2Profile)()
       * }}}
-      * @param slickProfile  Slick jdbcprofile such as 'slick.driver.H2Driver'
+      * @param slickProfile  Slick jdbcprofile such as 'slick.jdbc.H2Profile'
       * @param converter     a defined implicit type conversion function.
       *                      from SOURCE type to TARGET type, set to null if not required
       * @tparam SOURCE       source type, result type of DBIOAction, most likely a tuple type

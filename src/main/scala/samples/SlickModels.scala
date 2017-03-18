@@ -1,6 +1,6 @@
 package com.bayakala.funda.samples
 
-import slick.driver.H2Driver.api._
+import slick.jdbc.H2Profile.api._
 
 object SlickModels {
 

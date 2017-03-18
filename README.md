@@ -17,7 +17,7 @@ where streamSource is a *FunDA* stream produced by loading from database. And tr
 *FunDA*'s workflow *FDAPipeLine* is a *fs2-stream* and therefore is a *free-monad* type. It is highly composible:  
 
 ```
-val streamLoader = FDAStreamLoader(slick.driver.H2Driver)(toTypedRow _)      
+val streamLoader = FDAStreamLoader(slick.jdbc.H2Profile)(toTypedRow _)      
 val source = streamLoader.fda_typedStream(aqmQuery.result)(db)(512,512)()()
 val stream = source.filter{r => r.year > "1999"}.take(3).appendTask(showRecord)
 
@@ -38,13 +38,13 @@ as demostrated above, we can compose stream anyway we want before **startRun**
     TypedRow(row._1,row._2,row._3,row._4)  
 
 // loader to read from database and convert result collection to strong typed collection
-  val viewLoader = FDAViewLoader(slick.driver.H2Driver)(toTypedRow _)
+  val viewLoader = FDAViewLoader(slick.jdbc.H2Profile)(toTypedRow _)
   val dataSeq = viewLoader.fda_typedRows(aqmQuery.result)(db).toSeq
 // turn Seq collection into FunDA stream with strong-typed rows
   val aqmStream =  fda_staticSource(dataSeq)()()  
 
 // strong typed source is also possible with Slick data streaming
-  val streamLoader = FDAStreamLoader(slick.driver.H2Driver)(toTypedRow _)      
+  val streamLoader = FDAStreamLoader(slick.jdbc.H2Profile)(toTypedRow _)      
   val source = streamLoader.fda_typedStream(aqmQuery.result)(db)(512,512)()()
   
     
