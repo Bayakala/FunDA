@@ -172,9 +172,21 @@ package object funda {
               case Nil => go(h)
               case _ => Pull.output(Chunk.seq(lx)) >> go(h)
             }
-            case None => {task(FDANullRow.asInstanceOf[ROW]); Pull.done}
+            case None => task(FDANullRow.asInstanceOf[ROW]) match {
+              case Some(lx) => lx match {
+                case Nil => Pull.done
+                case _ => Pull.output(Chunk.seq(lx)) >> Pull.done
+              }
+              case _ => Pull.done
+            }
           }
-          case None => {task(FDANullRow.asInstanceOf[ROW]); Pull.done}
+          case None => task(FDANullRow.asInstanceOf[ROW]) match {
+            case Some(lx) => lx match {
+              case Nil => Pull.done
+              case _ => Pull.output(Chunk.seq(lx)) >> Pull.done
+            }
+            case _ => Pull.done
+          }
         }
       }
       in => in.pull(go)
@@ -204,13 +216,26 @@ package object funda {
               case Nil => go(a)(h)
               case _ => Pull.output(Chunk.seq(lx)) >> go(a)(h)
             }
-            case (a,None) => {task(a,FDANullRow.asInstanceOf[ROW]); Pull.done}
+            case (a,None) => task(a,FDANullRow.asInstanceOf[ROW]) match {
+              case (a,Some(lx)) => lx match {
+                case Nil => Pull.done
+                case _ => Pull.output(Chunk.seq(lx)) >> Pull.done
+              }
+              case _ => Pull.done
+            }
           }
-          case None => {task(acc,FDANullRow.asInstanceOf[ROW]); Pull.done}
+          case None => task(acc,FDANullRow.asInstanceOf[ROW]) match {
+            case (a,Some(lx)) => lx match {
+              case Nil => Pull.done
+              case _ => Pull.output(Chunk.seq(lx)) >> Pull.done
+            }
+            case _ => Pull.done
+          }
         }
       }
       in => in.pull(go(aggr))
     }
+
 
   }
 
