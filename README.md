@@ -108,7 +108,7 @@ user-defined-tasks are functional combinators designed by users each to achieve 
 
 ```
 an user-defined-task takes a row as input, use or transform it, and as a way of flow control, signify the state of next step of stream by returning ***Option[List[ROW]]*** as a result of execution of fda_next, fda_skip or fda_break. The input row must be extended from FDAROW and could be either a data-row or action-row.  
-#####Strong-typed-rows
+##### Strong-typed-rows
 FunDA streams are strong-typed, all rows must extend FDAROW. There are several categories of rows:
 
 * data-row: any case class extending FDAROW with parameters representing fields:  
@@ -120,7 +120,7 @@ FunDA streams are strong-typed, all rows must extend FDAROW. There are several c
 * null-row: a signal used to represend EOS(end-of-stream):  
    **case object FDANullRow extends FDAROW**
 
-#####standard-operation-procedures
+##### standard-operation-procedures
 User-defined-tasks have standard operation procedures as the following: 
 
 1. determine row type by pattern-matching
