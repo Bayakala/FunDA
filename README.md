@@ -18,7 +18,7 @@ where streamSource is a *FunDA* stream produced by loading from database. And tr
 
 ```
 val streamLoader = FDAStreamLoader(slick.jdbc.H2Profile)(toTypedRow _)      
-val source = streamLoader.fda_typedStream(aqmQuery.result)(db)(512,512)()()
+val source = streamLoader.fda_typedStream(aqmQuery.result)(db)(512,512)()
 val stream = source.filter{r => r.year > "1999"}.take(3).appendTask(showRecord)
 
 stream.startRun
@@ -41,11 +41,11 @@ as demostrated above, we can compose stream anyway we want before **startRun**
   val viewLoader = FDAViewLoader(slick.jdbc.H2Profile)(toTypedRow _)
   val dataSeq = viewLoader.fda_typedRows(aqmQuery.result)(db).toSeq
 // turn Seq collection into FunDA stream with strong-typed rows
-  val aqmStream =  fda_staticSource(dataSeq)()()  
+  val aqmStream =  fda_staticSource(dataSeq)()  
 
 // strong typed source is also possible with Slick data streaming
   val streamLoader = FDAStreamLoader(slick.jdbc.H2Profile)(toTypedRow _)      
-  val source = streamLoader.fda_typedStream(aqmQuery.result)(db)(512,512)()()
+  val source = streamLoader.fda_typedStream(aqmQuery.result)(db)(512,512)()
   
     
 ```   
@@ -210,3 +210,48 @@ To run many task as a whole, we composs them and **startRun**:
   streamToRun.startRun
     
 ```
+##### aggregation  
+for stream style processing, many times we need to aggregate over rows. user-aggregate-task is designed to fit in. An user-aggregate-task has the followin signature:  
+```
+ type FDAAggrTask[AGGR,ROW] = (AGGR,ROW) => (AGGR,Option[List[ROW]])
+```  
+AGGR is a user-defined type to represent state of aggregation. As from the above type signature, this is a typical functional style function with input state and output new state. The following is an example of user-aggregate-task:  
+
+```
+//define a structure to represent aggregator type
+  case class Accu(state: String, county: String, year: Int, count: Int, sumOfValue: Int)
+
+//user defined aggregation task. only pass aggregated row downstream
+  def countingAverage: FDAAggrTask[Accu,FDAROW] = (accu,row) => {
+    row match {
+      case aqmr: AQMRPTModel =>  //this is the target row type
+        if (accu.state == "" || (aqmr.state == accu.state && aqmr.year == accu.year))
+          //same condition: inc count and add sum, no need to pass row downstream
+          (Accu(aqmr.state,aqmr.county,aqmr.year,accu.count+1, accu.sumOfValue+aqmr.value),fda_skip)
+        else
+          //reset accumulator, create a new aggregated row and pass downstream
+          (Accu(aqmr.state,aqmr.county,aqmr.year,1, aqmr.value)
+            ,fda_next(AQMRPTModel(0,9999,accu.state,accu.county,accu.year
+            ,accu.count,accu.sumOfValue/accu.count,true)))
+      case FDANullRow =>
+          //last row encountered. create and pass new aggregated row
+        (Accu(accu.state,accu.county,accu.year,1, 0)
+          ,fda_next(AQMRPTModel(0,9999,accu.state,accu.county,accu.year
+          ,accu.count,accu.sumOfValue/accu.count,true)))
+         //incorrect row type, do nothing
+      case _ => (accu,fda_skip)
+    }
+  }
+
+```
+
+The following demostrates how it is executed:  
+
+```
+  aqmrStream.aggregateTask(Accu("","",0,0,0),countingAverage)
+    .appendTask(toAction)
+    .appendTask(runActionRow)
+    .startRun
+
+```  
+aqmrStream is a data source with rows to be aggregated.
