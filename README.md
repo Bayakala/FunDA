@@ -6,7 +6,7 @@ While *FRM* tools bring type safe language-integrated-query and flexible query c
 A typical *FunDA* program is as follows:  
 
 ```
-val streamSource = streamLoader.fda_typedStream(albumsInfo.result)(db)(512, 128)()()
+val streamSource = streamLoader.fda_typedStream(albumsInfo.result)(db)(512, 128)()
 
 streamSource.appendTask(transformData).appendTask(runActionQuery).appendTask(showResults).startRun
 ```
@@ -101,10 +101,112 @@ As a functional stream, It seems that some of the data access and processing in 
 fdaStream.map(row => transformData(row)).map(action => runQueryAction(action))
 ```
 unfortunately the fact is pure stream combinators lack powerful and flexible flow control abilities that are so crucial for processing stream elements and therefore user-defined-task is introduced to cope with the situation.
-user-defined-tasks are functional combinators designed by users to achieve a single task. And a much more complexed final task could be achieved by composing many of these tiny tasks in a specific order and then ***startRun***. The signature of FDAUserTask[ROW] is as follows:  
+user-defined-tasks are functional combinators designed by users each to achieve a single task. And a much more complexed final task could be achieved by composing many of these tiny tasks in a specific order and then ***startRun***. The signature of FDAUserTask[ROW] is as follows:  
 
 ```
   type FDAUserTask[ROW] = (ROW) => (Option[List[ROW]])
 
 ```
-an user-defined-task takes a row as input, use or transform it, and as a way of flow control, signify the state of next step of stream by returning ***Option[List[ROW]]*** as a result of execution of fda_next, fda_skip or fda_break. The input row must be extended from FDAROW and could be either a data-row or action-row.
+an user-defined-task takes a row as input, use or transform it, and as a way of flow control, signify the state of next step of stream by returning ***Option[List[ROW]]*** as a result of execution of fda_next, fda_skip or fda_break. The input row must be extended from FDAROW and could be either a data-row or action-row.  
+#####Strong-typed-rows
+FunDA streams are strong-typed, all rows must extend FDAROW. There are several categories of rows:
+
+* data-row: any case class extending FDAROW with parameters representing fields:  
+   **case class TypedRow(year: Int, state: String, value: Int) extends FDAROW**  
+* action-row: case class extending FDAROW with a **Slick DBIOAction** wrapped inside the parameter as follows:   
+   **case class FDAActionRow(action: FDAAction) extends FDAROW**  
+* error-row: case class extending FDAROW with a caught Execption object wrapped inside its parameter.   
+   **case class FDAErrorRow(e: Exception) extends FDAROW**  
+* null-row: a signal used to represend EOS(end-of-stream):  
+   **case object FDANullRow extends FDAROW**
+
+#####standard-operation-procedures
+User-defined-tasks have standard operation procedures as the following: 
+
+1. determine row type by pattern-matching
+2. use row fields to perform data processing
+3. control flow of rows downstream 
+
+the following are listings of a few deferent user-defined-tasks:  
+
+```
+   //strong typed row type. must extend FDAROW 
+  case class StateRow(state: String) extends FDAROW
+  
+  //a logging task. show name and pass row untouched donwstream
+  def showState: FDAUserTask[FDAROW] = row => {
+    row match {
+      case StateRow(sname) =>  //this is my row
+        println(s"Name of state is：$sname")
+        fda_next(row)
+      case _ => fda_skip    //not my row, do not pass it
+    }
+  }
+```
+
+```
+//a filter and processing task.
+//filter out rows with inconvertible value strings and out of ranged value and year
+  def filterRows: FDAUserTask[FDAROW] = row => {
+    row match {
+      case r: AQMRaw => {  //this is the correct row
+        try {  //process this row and catch exceptions
+          val yr = r.year.toInt
+          val v = r.value.toInt
+          val vlu = if ( v > 10  ) 10 else v  //max value allowed
+          //construct a new row 
+          val data = AQMRPTModel(0,r.mid.toInt,r.state,r.county,yr,vlu,0,true)
+          if ((yr > 1960 && yr < 2018))  //filtering
+            fda_next(data)   //this row ok. pass downstream
+          else
+            fda_skip    //filter out this row
+        } catch {
+          case e: Exception =>
+            fda_next(FDAErrorRow(e))   //pass the caught excption as a row downstream
+        }
+      }
+      case _ => fda_skip   //wrong type, skip
+    }
+  }
+```  
+
+```
+//a row transformation task
+//transform data to action for later execution
+  def toAction: FDAUserTask[FDAROW] = row => {
+    row match {
+      case r: AQMRPTModel =>  //this is my row
+        val queryAction = AQMRPTQuery += r  //slick action
+        fda_next(FDAActionRow(queryAction))
+      case _ => fda_skip
+    }
+  }
+```
+
+```
+//a query action runner task
+//get a query runner and an action task
+  val actionRunner = FDAActionRunner(slick.jdbc.H2Profile)
+  def runActionRow: FDAUserTask[FDAROW] = action => {
+    action match {
+      case FDAActionRow(q) =>   //this is a query action row
+         actionRunner.fda_execAction(q)(db)  //run it
+         fda_skip
+      case other@_ => fda_next(other) //don't touch it, just pass down
+      //someone else downstream could process it
+    }
+  }
+
+```
+
+To run many task as a whole, we composs them and **startRun**:  
+  
+```  
+//compose the program
+  val streamAllTasks =  streamAQMRaw.appendTask(filterRows)
+    .appendTask(toAction)
+    .appendTask(runActionRow)
+//run program
+  streamToRun.startRun
+    
+```

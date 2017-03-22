@@ -1,10 +1,9 @@
 package com.bayakala.funda.examples
 import slick.jdbc.H2Profile.api._
+import scala.language.implicitConversions
 import com.bayakala.funda._
 import api._
 import com.bayakala.funda.samples._
-import scala.language.implicitConversions
-
 
 object StrongTypedSource extends App {
 

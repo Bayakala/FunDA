@@ -1,6 +1,7 @@
 package com.bayakala.funda.samples
 
 import slick.jdbc.H2Profile.api._
+import com.bayakala.funda._
 
 object SlickModels {
 
@@ -11,7 +12,7 @@ object SlickModels {
                          , fips: String
                          , county: String
                          , year: String
-                         , value: String)
+                         , value: String) extends FDAROW
 
   //表结构: 定义字段类型, * 代表结果集字段
   class AQMRawTable(tag: Tag) extends Table[AQMRawModel](tag, "AIRQM") {
@@ -29,26 +30,28 @@ object SlickModels {
   //库表实例
   val AQMRawQuery = TableQuery[AQMRawTable]
 
-
   case class AQMRPTModel(rid: Long
                          , mid: Int
                          , state: String
                          , county: String
                          , year: Int
                          , value: Int
-                         , total: Int)
+                         , total: Int
+                         , valid: Boolean) extends FDAROW
 
   class AQMRPTTable(tag: Tag) extends Table[AQMRPTModel](tag, "AQMRPT") {
     def rid = column[Long]("ROWID",O.AutoInc,O.PrimaryKey)
     def mid = column[Int]("MEASUREID")
-    def state = column[String]("STATENAME")
-    def county = column[String]("COUNTYNAME")
+    def state = column[String]("STATENAME",O.Length(32))
+    def county = column[String]("COUNTYNAME",O.Length(32))
     def year = column[Int]("REPORTYEAR")
     def value = column[Int]("VALUE")
     def total = column[Int]("TOTAL")
+    def valid = column[Boolean]("VALID")
 
-    def * = (rid,mid,state,county,year,value,total) <> (AQMRPTModel.tupled, AQMRPTModel.unapply)
+    def * = (rid,mid,state,county,year,value,total,valid) <> (AQMRPTModel.tupled, AQMRPTModel.unapply)
   }
+
 
   val AQMRPTQuery = TableQuery[AQMRPTTable]
 }
