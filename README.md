@@ -254,4 +254,87 @@ The following demostrates how it is executed:
     .startRun
 
 ```  
-aqmrStream is a data source with rows to be aggregated.
+aqmrStream is a data source with rows to be aggregated.  
+
+### Parallel Processing  
+FunDA captures parallel processing abilities through fs2's non-deterministic streaming features. There are two areas we could apply FunDA's parallel processing abilities:  
+
+
+ * parallel loading multiple sources  
+ * parallel executing a user-defined-task  
+ 
+##### parallel loading  
+Parallel loading of many stream sources is achieved by calling function fda-par-load provided in FunDA. Data sources could be constructed from database tables on separate servers or by spliting a huge data table into smaller data stream sources like the following:  
+
+```
+  //define query for extracting State names from AQMRPT
+  val qryStates = AQMRPTQuery.map(_.state).distinct.sorted  
+  case class States(name: String) extends FDAROW
+  implicit def toStates(row: String) = States(row)
+  val stateLoader = FDAStreamLoader(slick.jdbc.H2Profile)(toStates _)
+  val statesStream = stateLoader.fda_typedStream(qryStates.result)(db_a)(64,64)()
+
+
+  //define query for extracting County names from AQMRPT in separate chunks
+  //query with state name >A and <K
+  val qryCountiesA_K = AQMRPTQuery.filter(r => (r.state.toUpperCase > "A" &&
+    r.state.toUpperCase < "K")).map(r => (r.state,r.county))
+    .distinctOn(r => (r._1,r._2))
+    .sortBy(r => (r._1,r._2))
+
+  //query with state name >K and <P
+  val qryCountiesK_P = AQMRPTQuery.filter(r => (r.state.toUpperCase > "K" &&
+    r.state.toUpperCase < "P")).map(r => (r.state,r.county))
+    .distinctOn(r => (r._1,r._2))
+    .sortBy(r => (r._1,r._2))
+
+  //query with state name >P
+  val qryCountiesP_Z = AQMRPTQuery.filter(r => r.state.toUpperCase > "P")
+    .map(r => (r.state,r.county))
+    .distinctOn(r => (r._1,r._2))
+    .sortBy(r => (r._1,r._2))
+
+  case class Counties(state: String, name: String) extends FDAROW
+  implicit def toCounties(row: (String,String)) = Counties(row._1,row._2)
+  val countyLoader = FDAStreamLoader(slick.jdbc.H2Profile)(toCounties _)
+  //3 separate streams to extract county names from the same database table AQMRPT
+  val countiesA_KStream = countyLoader.fda_typedStream(qryCountiesA_K.result)(db_b)(64,64)()
+  val countiesK_PStream = countyLoader.fda_typedStream(qryCountiesK_P.result)(db_b)(64,64)()
+  val countiesP_ZStream = countyLoader.fda_typedStream(qryCountiesP_Z.result)(db_b)(64,64)()
+
+``` 
+once these data sources are connected we could load them parallelly:  
+
+```
+  //obtain a combined stream with parallel loading with max of 4 open computation
+  val combinedStream = fda_par_load(statesStream,countiesA_KStream,countiesK_PStream,countiesP_ZStream)(4)
+
+``` 
+doing parallel loading is most like to produce a stream of multiple types of rows, in the above case **States** and **Counties** represent two different types of rows respectively. Therefore user-defined-tasks each targeting different type of row could be designed to handle rows of the target type, like follows:  
+
+```
+  //user-task to catch rows of States type and transform them into db insert actions
+  def processStates: FDAUserTask[FDAROW] = row => {
+    row match {
+        //catch states row and transform it into insert action
+      case States(stateName) =>  //target row type
+        println(s"State name: ${stateName}")
+        val action = StateQuery += StateModel(0,stateName)
+        fda_next(StateActionRow(action))
+      case others@ _ => //pass other types to next user-defined-tasks
+        fda_next(others)
+    }
+  }
+  //user-task to catch rows of Counties type and transform them into db insert actions
+  def processCounties: FDAUserTask[FDAROW] = row => {
+    row match {
+      //catch counties row and transform it into insert action
+      case Counties(stateName,countyName) =>  //target row type
+        println(s"County ${countyName} of ${stateName}")
+        val action = CountyQuery += CountyModel(0,countyName+ " of "+stateName)
+        fda_next(CountyActionRow(action))
+      case others@ _ => //pass other types to next user-defined-tasks
+        fda_next(others)
+    }
+  }
+```
