@@ -54,4 +54,21 @@ object SlickModels {
 
 
   val AQMRPTQuery = TableQuery[AQMRPTTable]
+
+  case class StateModel(id: Int, name: String) extends FDAROW
+  class StateTable(tag: Tag) extends Table[StateModel](tag,"STATE") {
+    def id = column[Int]("ID",O.AutoInc,O.PrimaryKey)
+    def name = column[String]("NAME",O.Length(32))
+    def * = (id,name)<>(StateModel.tupled,StateModel.unapply)
+  }
+  val StateQuery = TableQuery[StateTable]
+
+  case class CountyModel(id: Int, name: String) extends FDAROW
+  case class CountyTable(tag: Tag) extends Table[CountyModel](tag,"COUNTY") {
+    def id = column[Int]("ID",O.AutoInc,O.PrimaryKey)
+    def name = column[String]("NAME",O.Length(64))
+    def * = (id,name)<>(CountyModel.tupled,CountyModel.unapply)
+  }
+  val CountyQuery = TableQuery[CountyTable]
+
 }
