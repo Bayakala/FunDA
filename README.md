@@ -114,9 +114,13 @@ FunDA streams are strong-typed, all rows must extend FDAROW. There are several c
 * data-row: any case class extending FDAROW with parameters representing fields:  
    **case class TypedRow(year: Int, state: String, value: Int) extends FDAROW**  
 * action-row: case class extending FDAROW with a **Slick DBIOAction** wrapped inside the parameter as follows:   
-   **case class FDAActionRow(action: FDAAction) extends FDAROW**  
+   **case class FDAActionRow(action: FDAAction) extends FDAROW**
+   sometimes we need to target an action row to be run in different database context, we can define any freely as long as they extend FDAROW:  
+   **case class MyActionRow(action: FDAAction) extends FDAROW**  
 * error-row: case class extending FDAROW with a caught Execption object wrapped inside its parameter.   
    **case class FDAErrorRow(e: Exception) extends FDAROW**  
+   user can define their own error row for different exceptions as long as they extend FDAROW:  
+   **case class MyErrorRow(msg: String, e: Exception) extends FDAROW
 * null-row: a signal used to represend EOS(end-of-stream):  
    **case object FDANullRow extends FDAROW**
 
@@ -257,7 +261,7 @@ The following demostrates how it is executed:
 aqmrStream is a data source with rows to be aggregated.  
 
 ### Parallel Processing  
-FunDA captures parallel processing abilities through fs2's non-deterministic streaming features. There are two areas we could apply FunDA's parallel processing abilities:  
+FunDA captures parallel processing abilities through fs2's non-deterministic streaming features. There are two areas we could apply FunDA's parallelism:  
 
 
  * parallel loading multiple sources  
@@ -337,4 +341,39 @@ doing parallel loading is most like to produce a stream of multiple types of row
         fda_next(others)
     }
   }
+```  
+##### parallel execution  
+FunDA provides a function fda_runPar as a parallel task runner. a parallel task has the signature as follows:  
+
 ```
+/** Parallel task type
+    * stream of streams type for parallel running user action
+    * use stream.toPar to convert from FDAUserTask
+    */
+  type FDAParTask = Stream[Task,Stream[Task,Option[List[FDAROW]]]]
+
+```  
+and a FDAUserTask can be turned into FDAParTask as bellow:  
+
+```
+AQMRPTStream.toPar(getIdsThenInsertAction)
+```  
+where AQMRPTStream is a FunDA stream source and toPar is its method to turn getIdsThenInsertAction into a parallel task. The principle of task parallel execution is by spliting a single input stream into several un-ordered streams as inputs to several instances of the same task running parallelly in different threads. A FDAParTask requires a special runner to carry out as shown below:  
+
+```
+fda_runPar(AQMRPTStream.toPar(getIdsThenInsertAction))(8)
+```  
+fda_runPar has signature as follows:  
+
+```
+def fda_runPar(parTask: FDAParTask)(maxOpen: Int): FDAPipleLine[FDAROW]
+
+```  
+maxOpen designates the maxinum number of open computations and the actual number of open computations depends on number of CPU cores, size of thread-pool and user suggested maxinum numger of open computations. thread-pool can be adjusted from default values by declaring implicit instance of Stretagy:  
+
+```
+      implicit val strategy = Strategy.fromCachedDaemonPool("cachedPool")
+//      implicit val strategy = Strategy.fromFixedDaemonPool(6)
+
+```  
+the actual performance of parallel processing requires thorough tuning of thread-pool strategies with respect to number of CPU cores. whatever configurations, the performance gained through parallelism over single-thread task demonstrated great significance.  
