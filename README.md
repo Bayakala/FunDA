@@ -376,4 +376,4 @@ maxOpen designates the maxinum number of open computations and the actual number
 //      implicit val strategy = Strategy.fromFixedDaemonPool(6)
 
 ```  
-the actual performance of parallel processing requires thorough tuning of thread-pool strategies with respect to number of CPU cores. whatever configurations, the performance gained through parallelism over single-thread task demonstrated great significance.  
+the actual performance of parallel processing requires thorough tuning of thread-pool strategies with respect to number of CPU cores. whatever configurations, the performance gain through parallelism over single-thread task demonstrates great significance.  

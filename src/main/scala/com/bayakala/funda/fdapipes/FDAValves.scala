@@ -12,7 +12,7 @@ object FDAValves {  //流动控制方法
     * skip current row by sending a Some(Nil)
     * @return   Some(Nil) to signify skipping current row
     */
-  def fda_skip[ROW] = Some(List[ROW]())
+  def fda_skip[ROW]: Option[List[ROW]] = Some(List[ROW]())
 
   /** 将本行发送至下游连接管道
     * send row downstream
@@ -20,7 +20,7 @@ object FDAValves {  //流动控制方法
     * @tparam ROW   type of target row
     * @return       a single row to be sent downstream
     */
-  def fda_next[ROW](row: ROW) = Some(List[ROW](row))
+  def fda_next[ROW](row: ROW): Option[List[ROW]] = Some(List[ROW](row))
 
   /**
     * send a list of rows downstream in a chunk
@@ -28,7 +28,7 @@ object FDAValves {  //流动控制方法
     * @tparam ROW   type of target row
     * @return       a list of many rows
     */
-  def fda_next[ROW](lr: List[ROW]) = Some(lr)
+  def fda_next[ROW](lr: List[ROW]): Option[List[ROW]] = Some(lr)
 
   /** 终止流动
     * halt the current stream

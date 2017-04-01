@@ -24,9 +24,21 @@ trait FDAPars {
     *                    could be a number near and less than the cpu cores
     * @return            a single stream with nondeterministic element order
     */
-
   def fda_runPar(parTask: FDAParTask)(maxOpen: Int) =
     concurrent.join(maxOpen)(parTask).through(fda_afterPar)
+
+  /**
+    * load many sources in parallel.
+    * return a single combined stream with non-deterministic row order.
+    * @param parSource   user defined source constructor turned into
+    *                    par style by toParSource
+    * @param maxOpen     maximum number of concurrently open computation.
+    *                    could be a number near and less than the cpu cores
+    * @return            a single stream with nondeterministic element order
+    */
+  def fda_par_source(parSource: FDAParSource)(maxOpen: Int) =
+    concurrent.join(maxOpen)(parSource)
+
 
 /** flatten the Option[List[FDAROW]]] type returned by fda_runPar to plain FDAROW */
   private def fda_afterPar: Pipe[Task,Option[List[FDAROW]],FDAROW] = {

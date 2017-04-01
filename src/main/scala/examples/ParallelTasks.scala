@@ -112,8 +112,8 @@ object ParallelTasks extends App {
     row match {
       case aqm: AQMRPTModel =>
         if (aqm.valid) {
-          val stateId = getStateID(aqm.state)
-          val countyId = getCountyID(aqm.state,aqm.county)
+          val stateId = 0 //getStateID(aqm.state)
+          val countyId = 0 //getCountyID(aqm.state,aqm.county)
           val action = NORMAQMQuery += NORMAQMModel(0,aqm.mid, stateId, countyId, aqm.year,aqm.value,aqm.total)
           fda_next(FDAActionRow(action))
         }
@@ -147,7 +147,7 @@ object ParallelTasks extends App {
 
   implicit val strategy = Strategy.fromCachedDaemonPool("cachedPool")
   //      implicit val strategy = Strategy.fromFixedDaemonPool(6)
-  fda_runPar(AQMRPTStream.take(1000).toPar(getIdsThenInsertAction))(8)
+  fda_runPar(AQMRPTStream.toPar(getIdsThenInsertAction))(4)
     .appendTask(runInsertAction)
     .startRun
 

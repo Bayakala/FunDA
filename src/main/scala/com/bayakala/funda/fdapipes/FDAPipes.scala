@@ -39,14 +39,14 @@ trait FDAPipes {
     * @tparam ROW    type of row
     * @return        new state of Pull
     */
-  def fda_pushRow[ROW](row: ROW) = FDAJoints.fda_pushRow(row)
+  def fda_pushRow[ROW](row: ROW): FDAPipeJoint[ROW] = FDAJoints.fda_pushRow(row)
   /**
     * send list of rows to Pull
     * @param rows   list of rows to be sent
     * @tparam ROW   type of target row
     * @return       new state of Pull
     */
-  def fda_pushRows[ROW](rows: List[ROW]) = FDAJoints.fda_pushRows(rows)
+  def fda_pushRows[ROW](rows: List[ROW]): FDAPipeJoint[ROW] = FDAJoints.fda_pushRows(rows)
   /**
     * end output to Pull
     * @return  end of Pull
@@ -56,21 +56,21 @@ trait FDAPipes {
     * skip current row by sending a Some(Nil)
     * @return   Some(Nil) to signify skipping current row
     */
-  def fda_skip[ROW] = FDAValves.fda_skip[ROW]
+  def fda_skip[ROW]: Option[List[ROW]] = FDAValves.fda_skip[ROW]
   /**
     * send row downstream
     * @param row    target row
     * @tparam ROW   type of target row
     * @return       a single row to be sent downstream
     */
-  def fda_next[ROW](row: ROW) = FDAValves.fda_next(row)
+  def fda_next[ROW](row: ROW): Option[List[ROW]] = FDAValves.fda_next(row)
   /**
     * send a list of rows downstream in a chunk
     * @param lr     list of rows to be sent
     * @tparam ROW   type of target row
     * @return       a list of many rows
     */
-  def fda_next[ROW](lr: List[ROW]) = FDAValves.fda_next(lr)
+  def fda_next[ROW](lr: List[ROW]): Option[List[ROW]] = FDAValves.fda_next(lr)
   /**
     * halt the current stream
     * @return  a None indicating end of current stream process

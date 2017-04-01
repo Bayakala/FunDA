@@ -6,6 +6,7 @@ package com.bayakala
 package object funda {
   import fs2._
   import slick.dbio._
+  import scala.concurrent.Future
 
   implicit val fda_strategy = Strategy.fromFixedDaemonPool(4)
   implicit val fda_scheduler = Scheduler.fromFixedDaemonPool(4)
@@ -44,6 +45,12 @@ package object funda {
     */
   type FDAUserTask[ROW] = (ROW) => (Option[List[ROW]])
 
+  /** 数据源构建器类型
+    * a function type to produce a stream from input row
+    * used to be turn into FDAParSource by toParSource
+    */
+  type FDASourceLoader = FDAROW => FDAPipeLine[FDAROW]
+
   /** 合计作业类型
     * user define function with aggregation effect to be performed at a FDAWorkNode
     * given current aggregation value and row from upstream,
@@ -62,6 +69,11 @@ package object funda {
     */
   type FDAParTask = Stream[Task,Stream[Task,Option[List[FDAROW]]]]
 
+  /** 并行数据源类型
+    * source of sources type for parallel loading data sources
+    * use stream.toParSource to convert from FDASourceLoader
+    */
+  type FDAParSource = Stream[Task,Stream[Task,FDAROW]]
 
   /** 数据行类型
     * topmost generic row type
@@ -110,22 +122,24 @@ package object funda {
       * @param t user defined function
       * @return new stream
       */
-    def appendTask(t: FDAUserTask[FDAROW]) = fs2Stream.through(FDATask.fda_execUserTask(t))
+    def appendTask(t: FDAUserTask[FDAROW]): FDAPipeLine[FDAROW] =
+      fs2Stream.through(FDATask.fda_execUserTask(t))
 
     /**
       * append a user defined aggregation task t
       *
-      * @param aggr     initial value of aggregation
-      * @param t        user defined task
-      * @tparam AGGR    type of aggr
-      * @return         new stream
+      * @param aggr initial value of aggregation
+      * @param t    user defined task
+      * @tparam AGGR type of aggr
+      * @return new stream
       */
-    def aggregateTask[AGGR](aggr: AGGR, t: FDAAggrTask[AGGR,FDAROW]) = fs2Stream.through(FDATask.fda_aggregate(aggr,t))
+    def aggregateTask[AGGR](aggr: AGGR, t: FDAAggrTask[AGGR, FDAROW]): FDAPipeLine[FDAROW] =
+      fs2Stream.through(FDATask.fda_aggregate(aggr, t))
 
     /**
       * replace stream[Task,ROW].run.unsafeRun
       */
-    def startRun = fs2Stream.run.unsafeRun
+    def startRun: Unit = fs2Stream.run.unsafeRun
 
     /**
       * replace stream[Task,ROW].run.unsafeRunAsyncFuture
@@ -133,7 +147,7 @@ package object funda {
       *
       * @return Future
       */
-    def startFuture = fs2Stream.run.unsafeRunAsyncFuture
+    def startFuture[A]: Future[Unit] = fs2Stream.run.unsafeRunAsyncFuture
 
 
     /**
@@ -142,13 +156,18 @@ package object funda {
       * @param st user defined task
       * @return stream of streams
       */
-    def toPar(st: FDAUserTask[FDAROW]): Stream[Task, Stream[Task, Option[List[FDAROW]]]] =
+    def toPar(st: FDAUserTask[FDAROW]): FDAParTask =
       fs2Stream.map { row =>
         Stream.eval(Task {
           st(row)
         })
       }
+
+    def toParSource(load: FDASourceLoader): FDAParSource =
+      fs2Stream.map(row => load(row))
+
   }
+
 
   /** methods to run an user defined function on FDAPipeLine*/
   object FDATask { //作业节点工作方法

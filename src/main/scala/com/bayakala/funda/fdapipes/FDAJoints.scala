@@ -1,5 +1,6 @@
 package com.bayakala.funda.fdapipes
 
+import com.bayakala.funda.FDAPipeJoint
 import fs2._
 
 /**
@@ -12,7 +13,7 @@ object FDAJoints {  //数据发送方法
     * @tparam ROW    type of row
     * @return        new state of Pull
     */
-  def fda_pushRow[ROW](row: ROW) = Pull.output1(row)
+  def fda_pushRow[ROW](row: ROW): FDAPipeJoint[ROW] = Pull.output1(row)
 
   /**
     * send list of rows to Pull
@@ -20,7 +21,7 @@ object FDAJoints {  //数据发送方法
     * @tparam ROW   type of target row
     * @return       new state of Pull
     */
-  def fda_pushRows[ROW](rows: List[ROW]) = Pull.output(Chunk.seq(rows))
+  def fda_pushRows[ROW](rows: List[ROW]): FDAPipeJoint[ROW] = Pull.output(Chunk.seq(rows))
 
   /**
     * end output to Pull

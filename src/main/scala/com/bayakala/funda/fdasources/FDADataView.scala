@@ -14,7 +14,7 @@ trait FDADataView {
     * @tparam ROW    type of element inside collection
     * @return        an effectful stream
     */
-  private def streamSeq[ROW](h: Seq[ROW]): Stream[Task, ROW] =
+  private def streamSeq[ROW](h: Seq[ROW]): FDAPipeLine[ROW] =
     pullSeq(h).close
 
   /**
@@ -28,7 +28,7 @@ trait FDADataView {
     * @tparam ROW     type of element inside collection
     * @return         Pull in new state
     */
-  private def pullSeq[ROW](h: Seq[ROW]): Pull[Task, ROW, Unit] = {
+  private def pullSeq[ROW](h: Seq[ROW]): FDAPipeJoint[ROW] = {
     val it = h.iterator
     def go(it: Iterator[ROW]): Pull[Task, ROW, Unit] = for {
       res <- Pull.eval(Task.delay({ if (it.hasNext) Some(it.next()) else None }))
