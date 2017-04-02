@@ -92,7 +92,16 @@ package object funda {
   case class FDAErrorRow(e: Exception) extends FDAROW
 
   /**
-    * designed to emit FDANullRow or FDAErrorRow
+    * manually emit a row such as FDANullRow or FDAErrorRow
+    * @example {{{
+    *    //loading rows by year
+    *    def loadRowsByYear: FDASourceLoader = row => {
+    *      row match {
+    *       case Years(y) => loadRowsInYear(y) //produce stream of the year
+    *       case _ => fda_appendRow(FDANullRow)
+    *      }
+    *     }
+    *   }}}
     * @param row   row to emit
     * @return      new stream
     */
@@ -118,7 +127,11 @@ package object funda {
   implicit class toFDAOps(fs2Stream: FDAPipeLine[FDAROW]) {
     /**
       * append a user task t to stream
-      *
+      * @example {{{
+      *    val streamAllTasks =  streamAQMRaw.appendTask(filterRows)
+      *                          .appendTask(toAction)
+      *                          .appendTask(runActionRow)
+      * }}}
       * @param t user defined function
       * @return new stream
       */
@@ -127,7 +140,15 @@ package object funda {
 
     /**
       * append a user defined aggregation task t
+      * @example {{{
+      *   //user defined aggregator type.
+      *   case class Accu(state: String, county: String, year: Int, count: Int, sumOfValue: Int)
       *
+      *   aqmrStream.aggregateTask(Accu("","",0,0,0),aggregateValue)
+      *             .appendTask(toAction)
+      *             .appendTask(runActionRow)
+      *             .startRun
+      * }}}
       * @param aggr initial value of aggregation
       * @param t    user defined task
       * @tparam AGGR type of aggr
@@ -138,6 +159,12 @@ package object funda {
 
     /**
       * replace stream[Task,ROW].run.unsafeRun
+      * @example {{{
+      *              streamAQMRaw.appendTask(filterRows)
+      *                          .appendTask(toAction)
+      *                          .appendTask(runActionRow)
+      *                          .startRun
+      * }}}
       */
     def startRun: Unit = fs2Stream.run.unsafeRun
 
@@ -152,7 +179,20 @@ package object funda {
 
     /**
       * turn user task into type for parallel computation
+      * @example {{{
+      *         //runner for the action rows
+      *    val runner = FDAActionRunner(slick.jdbc.H2Profile)
+      *    def runInsertAction: FDAUserTask[FDAROW] = row =>
+      *       row match {
+      *         case FDAActionRow(action) =>
+      *            runner.fda_execAction(action)(db)
+      *            fda_skip
+      *         case _ => fda_skip
+      *       }
       *
+      *    //turn runInsertAction into parallel task
+      *    val parRun = actionStream.toPar(runInsertAction)
+      * }}}
       * @param st user defined task
       * @return stream of streams
       */
@@ -163,6 +203,31 @@ package object funda {
         })
       }
 
+    /**
+      * turn a single stream into parallel sources
+      * @example {{{
+      *    //loading rows with year yr
+      *    def loadRowsInYear(yr: Int) = {
+      *        //a new query
+      *        val query = AQMRPTQuery.filter(row => row.year === yr)
+      *        //reuse same loader
+      *        AQMRPTLoader.fda_typedStream(query.result)(db)(256, 256)(println(s"End of stream ${yr}!!!!!!"))
+      *    }
+      *
+      *    //loading rows by year
+      *    def loadRowsByYear: FDASourceLoader = row => {
+      *      row match {
+      *       case Years(y) => loadRowsInYear(y) //produce stream of the year
+      *       case _ => fda_appendRow(FDANullRow)
+      *      }
+      *    }
+      *
+      *    //produce a stream from parallel sources
+      *    val source = fda_par_source(parSource)(4)
+      * }}}
+      * @param load stream constructing function: FDAROW => FDAPipeLine[FDAROW]
+      * @return stream of streams
+      */
     def toParSource(load: FDASourceLoader): FDAParSource =
       fs2Stream.map(row => load(row))
 
@@ -183,7 +248,7 @@ package object funda {
       * @tparam ROW   row type: FDAROW or FDAActionROW
       * @return       new state of stream
       */
-     def fda_execUserTask[ROW](task: FDAUserTask[ROW]): FDAWorkNode[ROW] = {
+     private[funda] def fda_execUserTask[ROW](task: FDAUserTask[ROW]): FDAWorkNode[ROW] = {
       def go: FDAValve[ROW] => FDAPipeJoint[ROW] = h => {
         h.receive1Option {
           case Some((r, h)) => task(r) match {
@@ -227,7 +292,7 @@ package object funda {
       * @tparam ROW    type of row
       * @return        new state of stream
       */
-    def fda_aggregate[AGGR,ROW](aggr: AGGR, task: FDAAggrTask[AGGR,ROW]): FDAWorkNode[ROW] = {
+    private[funda] def fda_aggregate[AGGR,ROW](aggr: AGGR, task: FDAAggrTask[AGGR,ROW]): FDAWorkNode[ROW] = {
       def go(acc: AGGR): FDAValve[ROW] => FDAPipeJoint[ROW] = h => {
         h.receive1Option {
           case Some((r, h)) => task(acc,r) match {

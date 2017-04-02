@@ -341,7 +341,38 @@ doing parallel loading is most like to produce a stream of multiple types of row
         fda_next(others)
     }
   }
+```
+###### parallel loading a stream of sources  
+The above demonstration of parallel loading started with known number of stream sources. This is especially convinient for users to manualy arrange stream sources of different row types in a parallel loading operation. When a list of stream sources is itself in a stream, to parallel load the streams we need to first turn the list into **FDAParSource** over a **FDASourceLoader** function as belows:  
+
+```
+ //loading rows with year yr
+  def loadRowsInYear(yr: Int) = {
+    //a new query
+    val query = AQMRPTQuery.filter(row => row.year === yr)
+    //reuse same loader
+    AQMRPTLoader.fda_typedStream(query.result)(db)(256, 256)(println(s"End of stream ${yr}!!!!!!"))
+  }
+
+  //loading rows by year
+  def loadRowsByYear: FDASourceLoader = row => {
+    row match {
+      case Years(y) => loadRowsInYear(y) //produce stream of the year
+      case _ => fda_appendRow(FDANullRow)
+    }
+  }  
+  
+  //get parallel source constructor
+  val parSource = yearStream.toParSource(loadRowsByYear)
+  
 ```  
+the following demonstrates loading of this parallel source:  
+
+```
+  //produce a stream from parallel source
+  val source = fda_par_source(parSource)(4)
+```
+**fda_par_source** is actually a parallel execution function analogous to **fda_runPar** which is described in the following section.
 ##### parallel execution  
 FunDA provides a function fda_runPar as a parallel task runner. a parallel task has the signature as follows:  
 
@@ -376,4 +407,93 @@ maxOpen designates the maxinum number of open computations and the actual number
 //      implicit val strategy = Strategy.fromFixedDaemonPool(6)
 
 ```  
-the actual performance of parallel processing requires thorough tuning of thread-pool strategies with respect to number of CPU cores. whatever configurations, the performance gain through parallelism over single-thread task demonstrates great significance.  
+the actual performance of parallel processing requires thorough tuning of thread-pool strategies with respect to number of CPU cores. whatever configurations, the performance gain through parallelism over single-thread task demonstrates great significance.  A complete composition of parallel loading and parallel execution has the following style:   
+
+```
+//get parallel source constructor
+  val parSource = yearStream.toParSource(loadRowsByYear)
+  //implicit val strategy = Strategy.fromCachedDaemonPool("cachedPool")
+  //produce a stream from parallel sources
+  val source = fda_par_source(parSource)(4)
+  //turn getIdsThenInsertAction into parallel task
+  val parTasks = source.toPar(getIdsThenInsertAction)
+  //runPar to produce a new stream
+  val actionStream =fda_runPar(parTasks)(4)
+  //turn runInsertAction into parallel task
+  val parRun = actionStream.toPar(runInsertAction)
+  //runPar and carry out by startRun
+  fda_runPar(parRun)(2).startRun
+
+```
+##### remarks when writing parallel processing programs  
+According to experiments, **FunDA** concurrent combinators are quite sensitive to thread management. The **maxOpen** parameters of both **fda_runPar** and **fda_par_source** in the examples given above had to be tuned to avoid thread contention and process-hang. The example used **HikariCP** with parameters set below:  
+
+```
+h2db {
+    url = "jdbc:h2:tcp://localhost/~/slickdemo;mv_store=false"
+    driver = "org.h2.Driver"
+    connectionPool = HikariCP
+    numThreads = 48
+    maxConnections = 48
+    minConnections = 12
+    keepAliveConnection = true
+}
+
+```
+### Exceptions handling and Finalizers  
+**FunDA** provides a mechanism that gaurantees a **finalizer** will be called upon termination of the stream, no matter it is naturally end of stream or break-out caused by interruptions or exceptions. Finalizers are actually call-back-functions hook-up to a FunDA stream during source construction, like the following:  
+
+```
+  val view = fda_staticSource(stateSeq)(println("***Finally*** the end of view!!!"))
+  val stream = streamLoader.fda_typedStream(StateQuery.result)(db)(64,64)(println("***Finally*** the end of stream!!!"))
+
+```  
+Exceptions can be caught by onError call-backs that are hooked-up at the very end of **FunDA** stream in order to catch all exceptions at every work-node as follows:  
+
+```
+   val v = viewState.appendTask(errorRow).appendTask(trackRows)
+   val v1 = v.onError {case e: Exception => println(s"Caught Error in viewState!!![${e.getMessage}]"); fda_appendRow(FDANullRow)}
+   v1.startRun
+
+   val s = streamState.appendTask(errorRow).appendTask(trackRows)
+   val s1 = s.onError {case e: Exception => println(s"Caught Error in streamState!!![${e.getMessage}]"); fda_appendRow(FDANullRow)}
+   s1.startRun
+
+```  
+#####user defined exceptions  
+Sometimes we wish to watch some particular events and take corresponding action when they take place. This can be achieved by user-defined-exceptions. User-defined-exceptions are special rows extending from **FDAROW** that can be caught by pattern matching. The following is an example of user-defined-exception and its handling:  
+
+```
+  case class DivideZeroError(msg: String, e: Exception) extends FDAROW
+  def catchError: FDAUserTask[FDAROW] = row => {
+    row match {
+      case StateModel(id,name) =>
+        try {
+          val idx = id / (id - 3)
+          fda_next(StateModel(idx, name))
+        } catch {
+          case e: Exception => //pass an error row
+            fda_next(DivideZeroError(s"Divide by zero excption at ${id}",e))
+        }
+      case m@_ => fda_next(m)
+    }
+  }
+  
+  def trackRows: FDAUserTask[FDAROW] = row => {
+    row match {
+      case m@StateModel(id,name) =>
+        println(s"State: $id $name")
+        println( "----------------")
+        fda_next(m)
+      case DivideZeroError(msg, e) => //error row
+        println(s"***Error:$msg***")
+        fda_skip
+      case m@_ => fda_next(m)
+    }
+  }
+
+  val s = streamState.take(5).appendTask(catchError).appendTask(trackRows)
+  val s1 = s.onError {case e: Exception => println(s"Caught Error in streamState!!![${e.getMessage}]"); fda_appendRow(FDANullRow)}
+  s1.startRun
+
+```

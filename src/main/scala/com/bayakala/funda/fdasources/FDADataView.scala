@@ -41,7 +41,7 @@ trait FDADataView {
     * produce a static view source from a Seq[ROW] collection using famous 'bracket'
     * provide facade to error handling and cleanup
     * @example {{{
-    *    val source = fda_staticSource(dataSeq)()
+    *     val source = fda_staticSource(dataSeq)()
     *
     *     val safeSource = fda_staticSource(dataSeq)(
     *        println("the end finally!"))

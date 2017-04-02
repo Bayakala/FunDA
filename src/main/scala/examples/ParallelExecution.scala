@@ -158,7 +158,6 @@ object ParallelExecution extends App {
       case Years(y) => loadRowsInYear(y) //produce stream of the year
       case _ => fda_appendRow(FDANullRow)
     }
-
   }
 
 
@@ -181,7 +180,6 @@ object ParallelExecution extends App {
   //the following is a process of composition of stream combinators
   //get parallel source constructor
   val parSource = yearStream.toParSource(loadRowsByYear)
-  //implicit val strategy = Strategy.fromCachedDaemonPool("cachedPool")
   //produce a stream from parallel sources
   val source = fda_par_source(parSource)(4)
   //turn getIdsThenInsertAction into parallel task

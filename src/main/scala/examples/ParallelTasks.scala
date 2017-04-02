@@ -132,6 +132,7 @@ object ParallelTasks extends App {
 
   val cnt_start = System.currentTimeMillis()
 
+
   /*
   AQMRPTStream.take(100000)
     .appendTask(getIdsThenInsertAction)
