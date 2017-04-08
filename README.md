@@ -60,7 +60,7 @@ val stream = source.filter{r => r.year > "1999"}.take(3).appendTask(showRecord)
 stream.startRun
 ```
 as demonstrated above, we can compose stream anyway we want before **startRun**
-### FunDA stream (The progrm)
+### FunDA stream (The program)
 #####  strong-typed rows
 As mentioned above, FunDA programs are just composition of a **source** and a string of **user-defined-tasks** as a stream with data produced by **source** as rows. To facilitate stream operations we must convert data loaded from database into strong-typed rows. A practical case is that *Slick* usually returns query results in a collection of tuples. Thus we must take an extra step to convert them into user defined strong-typed case classes. 
 The following code snippet demonstrates such conversion:
