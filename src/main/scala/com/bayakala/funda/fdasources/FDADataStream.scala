@@ -4,6 +4,13 @@ import fs2._
 import play.api.libs.iteratee._
 import com.bayakala.funda._
 import slick.jdbc.JdbcProfile
+/*
+import akka.actor._
+import akka.stream.scaladsl._
+import akka.stream._
+import akka.stream.stage._
+import akka.stream.stage.{GraphStage, GraphStageLogic}
+*/
 /** stream loader class wrapper */
 trait FDADataStream {
 
@@ -57,7 +64,30 @@ trait FDADataStream {
       s.onFinalize(Task.delay(finalizer))
 
     }
+/*
+    def fda_akkaTypedStream(action: DBIOAction[Iterable[SOURCE],Streaming[SOURCE],Effect.Read])(
+      slickDB: Database)(
+                         fetchSize: Int, queSize: Int)(
+                         finalizer: => Unit = ())(
+                         implicit convert: SOURCE => TARGET): FDAPipeLine[TARGET] = {
+      val disableAutocommit = SimpleDBIO(_.connection.setAutoCommit(false))
+      val action_ = action.withStatementParameters(fetchSize = fetchSize)
+      val publisher = slickDB.stream(disableAutocommit andThen action_)
+      implicit val actorSys = ActorSystem("actor-system")
+      implicit val ec = actorSys.dispatcher
+      implicit val mat = ActorMaterializer()
+      // construct akka source
+      val akkaSource = Source.fromPublisher[SOURCE](publisher)
 
+      val s = Stream.eval(async.boundedQueue[Task,Option[SOURCE]](queSize)).flatMap { q =>
+        Task(akkaSource.to(new Fs2Gate[SOURCE](q)).run).unsafeRunAsyncFuture()
+        pipe.unNoneTerminate(q.dequeue).map {row => convert(row)}
+      }
+      s.onFinalize({
+        actorSys.terminate()
+        Task.delay(finalizer)
+      })
+    } */
     /**
       * returns a reactive-stream from Slick DBIOAction result
       * using play-iteratees and fs2 queque to connect to slick data stream publisher
@@ -108,6 +138,36 @@ trait FDADataStream {
         pushData(q)
 
     }
+/*
+    class Fs2Gate[T](q: fs2.async.mutable.Queue[Task,Option[T]]) extends GraphStage[SinkShape[T]] {
+      val in = Inlet[T]("inport")
+      val shape = SinkShape.of(in)
+
+      override def createLogic(inheritedAttributes: Attributes): GraphStageLogic =
+        new GraphStageLogic(shape) with InHandler {
+          override def preStart(): Unit = {
+            pull(in)          //initiate stream elements movement
+            super.preStart()
+          }
+
+          override def onPush(): Unit = {
+            q.enqueue1(Some(grab(in))).unsafeRun()
+            pull(in)
+          }
+
+          override def onUpstreamFinish(): Unit = {
+            q.enqueue1(None).unsafeRun()
+            completeStage()
+          }
+
+          override def onUpstreamFailure(ex: Throwable): Unit = {
+            q.enqueue1(None).unsafeRun()
+            completeStage()
+          }
+          setHandler(in,this)
+        }
+    }
+  */
 
   }
 
