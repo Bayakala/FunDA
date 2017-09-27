@@ -47,7 +47,7 @@ trait FDADataStream {
       implicit convert: SOURCE => TARGET): FDAPipeLine[TARGET] = {
       val disableAutocommit = SimpleDBIO(_.connection.setAutoCommit(false))
       val action_ = action.withStatementParameters(fetchSize = fetchSize)
-      val publisher = slickDB.stream(disableAutocommit andThen action)
+      val publisher = slickDB.stream(disableAutocommit andThen action_)
       val enumerator = streams.IterateeStreams.publisherToEnumerator(publisher)
 
       val s = Stream.eval(async.boundedQueue[Task,Option[SOURCE]](queSize)).flatMap { q =>
@@ -81,7 +81,7 @@ trait FDADataStream {
                            finalizer: => Unit = ()): FDAPipeLine[SOURCE] = {
       val disableAutocommit = SimpleDBIO(_.connection.setAutoCommit(false))
       val action_ = action.withStatementParameters(fetchSize = fetchSize)
-      val publisher = slickDB.stream(disableAutocommit andThen action)
+      val publisher = slickDB.stream(disableAutocommit andThen action_)
       val enumerator = streams.IterateeStreams.publisherToEnumerator(publisher)
 
       val s = Stream.eval(async.boundedQueue[Task,Option[SOURCE]](queSize)).flatMap { q =>

@@ -1,12 +1,12 @@
 lazy val commonSettings = Seq(
   organization := "com.bayakala"
-  , version := "1.0.0-RC-01"
+  , version := "1.0.0-RC-02"
   , resolvers ++= Seq(
     Resolver.mavenLocal
     , Resolver.sonatypeRepo("releases")
     , Resolver.sonatypeRepo("snapshots"))
-  , scalaVersion := "2.11.8"
-//  , crossScalaVersions := Seq("2.11.8", "2.12.0", "2.12.1")
+  , scalaVersion := "2.12.3"
+  , crossScalaVersions := Seq("2.11.8", "2.11.9", "2.12.0", "2.12.1", "2.12.2")
   , bintrayOrganization := Some("bayakala")
   , licenses += ("Apache-2.0", url("http://www.apache.org/licenses/LICENSE-2.0"))
 )
