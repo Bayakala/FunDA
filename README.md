@@ -557,7 +557,7 @@ exceptions can be caught by **onError** call-backs that are hooked-up at the **v
    s1.startRun
 
 ```  
-#####user defined exceptions  
+##### user defined exceptions  
 Sometimes we wish to watch some particular events and take corresponding actions when they take place. This can be achieved by user-defined-exceptions. User-defined-exceptions are special rows extending from **FDAROW** that can be caught by pattern matching. The following is an example of user-defined-exception and its handling:  
 
 ```
