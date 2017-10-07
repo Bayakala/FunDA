@@ -11,6 +11,13 @@ package object funda {
   implicit val fda_strategy = Strategy.fromFixedDaemonPool(4)
   implicit val fda_scheduler = Scheduler.fromFixedDaemonPool(4)
 
+  class Terminator {
+    var terminateNow = false
+    def reset = terminateNow = false
+    def killNow = terminateNow = true
+  }
+  implicit object KillSwitch extends Terminator
+
   /** 数据处理管道
     * a stream of data or action rows
     * @tparam ROW   type of row

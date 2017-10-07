@@ -40,7 +40,7 @@ object ParallelLoading extends App {
   case class States(name: String) extends FDAROW
   implicit def toStates(row: String) = States(row)
   val stateLoader = FDAStreamLoader(slick.jdbc.H2Profile)(toStates _)
-  val statesStream = stateLoader.fda_typedStream(qryStates.result)(db_a)(64,64)()
+  val statesStream = stateLoader.fda_typedStream(qryStates.result)(db_a)(64,64)()()
 
 
   //define query for extracting County names from AQMRPT in separate chunks
@@ -66,9 +66,9 @@ object ParallelLoading extends App {
   implicit def toCounties(row: (String,String)) = Counties(row._1,row._2)
   val countyLoader = FDAStreamLoader(slick.jdbc.H2Profile)(toCounties _)
   //3 separate streams to extract county names from the same database table AQMRPT
-  val countiesA_KStream = countyLoader.fda_typedStream(qryCountiesA_K.result)(db_b)(64,64)()
-  val countiesK_PStream = countyLoader.fda_typedStream(qryCountiesK_P.result)(db_b)(64,64)()
-  val countiesP_ZStream = countyLoader.fda_typedStream(qryCountiesP_Z.result)(db_b)(64,64)()
+  val countiesA_KStream = countyLoader.fda_typedStream(qryCountiesA_K.result)(db_b)(64,64)()()
+  val countiesK_PStream = countyLoader.fda_typedStream(qryCountiesK_P.result)(db_b)(64,64)()()
+  val countiesP_ZStream = countyLoader.fda_typedStream(qryCountiesP_Z.result)(db_b)(64,64)()()
 
   //obtain a combined stream with parallel loading with max of 4 open computation
   val combinedStream = fda_par_load(statesStream,countiesA_KStream,countiesK_PStream,countiesP_ZStream)(4)

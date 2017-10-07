@@ -149,7 +149,7 @@ object ParallelExecution extends App {
     //a new query
     val query = AQMRPTQuery.filter(row => row.year === yr)
     //reuse same loader
-    AQMRPTLoader.fda_typedStream(query.result)(db)(256, 256)(println(s"End of stream ${yr}!!!!!!"))
+    AQMRPTLoader.fda_typedStream(query.result)(db)(256, 256)(println(s"End of stream ${yr}!!!!!!"))()
   }
 
   //loading rows by year

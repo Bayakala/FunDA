@@ -106,7 +106,7 @@ object ParallelTasks extends App {
   implicit def toAQMRPT(row: AQMRPTTable#TableElementType) =
     AQMRPTModel(row.rid,row.mid,row.state,row.county,row.year,row.value,row.total,row.valid)
   val AQMRPTLoader = FDAStreamLoader(slick.jdbc.H2Profile)(toAQMRPT _)
-  val AQMRPTStream = AQMRPTLoader.fda_typedStream(AQMRPTQuery.result)(db)(256,256)()
+  val AQMRPTStream = AQMRPTLoader.fda_typedStream(AQMRPTQuery.result)(db)(256,256)()()
 
   def getIdsThenInsertAction: FDAUserTask[FDAROW] = row => {
     row match {

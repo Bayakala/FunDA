@@ -15,7 +15,7 @@ object ExceptionsAndFinalizers extends App {
 
   val stateSeq = viewLoader.fda_typedRows(StateQuery.result)(db).toSeq
   val viewState = fda_staticSource(stateSeq)(println("***Finally*** the end of viewState!!!"))
-  val streamState = streamLoader.fda_typedStream(StateQuery.result)(db)(64,64)(println("***Finally*** the end of streamState!!!"))
+  val streamState = streamLoader.fda_typedStream(StateQuery.result)(db)(64,64)(println("***Finally*** the end of streamState!!!"))()
 
 /*
   viewState.startRun

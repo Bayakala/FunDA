@@ -4,6 +4,13 @@ import fs2._
 import play.api.libs.iteratee._
 import com.bayakala.funda._
 import slick.jdbc.JdbcProfile
+/*
+import akka.actor._
+import akka.stream.scaladsl._
+import akka.stream._
+import akka.stream.stage._
+import akka.stream.stage.{GraphStage, GraphStageLogic}
+*/
 /** stream loader class wrapper */
 trait FDADataStream {
 
@@ -42,22 +49,47 @@ trait FDADataStream {
       */
     def fda_typedStream(action: DBIOAction[Iterable[SOURCE],Streaming[SOURCE],Effect.Read])(
       slickDB: Database)(
-      fetchSize: Int, queSize: Int)(
+      fetchSize: Int, queSize: Int, take: Int = 0)(
       finalizer: => Unit = ())(
-      implicit convert: SOURCE => TARGET): FDAPipeLine[TARGET] = {
+        killSwitch: Terminator = KillSwitch)(
+        implicit convert: SOURCE => TARGET)
+      : FDAPipeLine[TARGET] = {
       val disableAutocommit = SimpleDBIO(_.connection.setAutoCommit(false))
       val action_ = action.withStatementParameters(fetchSize = fetchSize)
-      val publisher = slickDB.stream(disableAutocommit andThen action)
+      val publisher = slickDB.stream(disableAutocommit andThen action_)
       val enumerator = streams.IterateeStreams.publisherToEnumerator(publisher)
 
       val s = Stream.eval(async.boundedQueue[Task,Option[SOURCE]](queSize)).flatMap { q =>
-        Task { Iteratee.flatten(enumerator |>> pushData(q)).run }.unsafeRunAsyncFuture()
+        Task { Iteratee.flatten(enumerator |>> pushData(killSwitch,take,q)).run }.unsafeRunAsyncFuture()
         pipe.unNoneTerminate(q.dequeue).map {row => convert(row)}
       }
       s.onFinalize(Task.delay(finalizer))
 
     }
+/*
+    def fda_akkaTypedStream(action: DBIOAction[Iterable[SOURCE],Streaming[SOURCE],Effect.Read])(
+      slickDB: Database)(
+                         fetchSize: Int, queSize: Int)(
+                         finalizer: => Unit = ())(
+                         implicit convert: SOURCE => TARGET): FDAPipeLine[TARGET] = {
+      val disableAutocommit = SimpleDBIO(_.connection.setAutoCommit(false))
+      val action_ = action.withStatementParameters(fetchSize = fetchSize)
+      val publisher = slickDB.stream(disableAutocommit andThen action_)
+      implicit val actorSys = ActorSystem("actor-system")
+      implicit val ec = actorSys.dispatcher
+      implicit val mat = ActorMaterializer()
+      // construct akka source
+      val akkaSource = Source.fromPublisher[SOURCE](publisher)
 
+      val s = Stream.eval(async.boundedQueue[Task,Option[SOURCE]](queSize)).flatMap { q =>
+        Task(akkaSource.to(new Fs2Gate[SOURCE](q)).run).unsafeRunAsyncFuture()
+        pipe.unNoneTerminate(q.dequeue).map {row => convert(row)}
+      }
+      s.onFinalize({
+        actorSys.terminate()
+        Task.delay(finalizer)
+      })
+    } */
     /**
       * returns a reactive-stream from Slick DBIOAction result
       * using play-iteratees and fs2 queque to connect to slick data stream publisher
@@ -77,15 +109,16 @@ trait FDADataStream {
       */
     def fda_plainStream(action: DBIOAction[Iterable[SOURCE],Streaming[SOURCE],Effect.Read])(
         slickDB: Database)(
-                           fetchSize: Int, queSize: Int)(
-                           finalizer: => Unit = ()): FDAPipeLine[SOURCE] = {
+                           fetchSize: Int, queSize: Int, take: Int = 0)(
+                           finalizer: => Unit = ())(
+        implicit killSwitch: Terminator): FDAPipeLine[SOURCE] = {
       val disableAutocommit = SimpleDBIO(_.connection.setAutoCommit(false))
       val action_ = action.withStatementParameters(fetchSize = fetchSize)
-      val publisher = slickDB.stream(disableAutocommit andThen action)
+      val publisher = slickDB.stream(disableAutocommit andThen action_)
       val enumerator = streams.IterateeStreams.publisherToEnumerator(publisher)
 
       val s = Stream.eval(async.boundedQueue[Task,Option[SOURCE]](queSize)).flatMap { q =>
-        Task { Iteratee.flatten(enumerator |>> pushData(q)).run }.unsafeRunAsyncFuture()
+        Task { Iteratee.flatten(enumerator |>> pushData(killSwitch,take,q)).run }.unsafeRunAsyncFuture()
         pipe.unNoneTerminate(q.dequeue)
       }
       s.onFinalize(Task.delay(finalizer))
@@ -98,16 +131,52 @@ trait FDADataStream {
       * @tparam R         stream element type
       * @return           iteratee in new state
       */
-    private def pushData[R](q: async.mutable.Queue[Task,Option[R]]): Iteratee[R,Unit] = Cont {
-      case Input.EOF   =>
-        q.enqueue1(None).unsafeRun
-        Done((), Input.Empty)
-      case Input.Empty => pushData(q)
-      case Input.El(e) =>
-        q.enqueue1(Some(e)).unsafeRun
-        pushData(q)
-
+    private def pushData[R](killSwitch: Terminator, take: Int, q: async.mutable.Queue[Task,Option[R]]): Iteratee[R,Unit] = Cont {
+       case Input.EOF =>
+         q.enqueue1(None).unsafeRun
+         Done((), Input.Empty)
+       case Input.Empty => pushData(killSwitch,take,q)
+       case Input.El(e) =>
+         if (take >= 0 && !killSwitch.terminateNow) {
+           q.enqueue1(Some(e)).unsafeRun
+           pushData(killSwitch, if(take == 0) 0 else {if (take == 1) -1 else take - 1}, q)
+         }
+         else {
+           killSwitch.reset
+           q.enqueue1(None).unsafeRun
+           Done((), Input.Empty)
+         }
     }
+/*
+    class Fs2Gate[T](q: fs2.async.mutable.Queue[Task,Option[T]]) extends GraphStage[SinkShape[T]] {
+      val in = Inlet[T]("inport")
+      val shape = SinkShape.of(in)
+
+      override def createLogic(inheritedAttributes: Attributes): GraphStageLogic =
+        new GraphStageLogic(shape) with InHandler {
+          override def preStart(): Unit = {
+            pull(in)          //initiate stream elements movement
+            super.preStart()
+          }
+
+          override def onPush(): Unit = {
+            q.enqueue1(Some(grab(in))).unsafeRun()
+            pull(in)
+          }
+
+          override def onUpstreamFinish(): Unit = {
+            q.enqueue1(None).unsafeRun()
+            completeStage()
+          }
+
+          override def onUpstreamFailure(ex: Throwable): Unit = {
+            q.enqueue1(None).unsafeRun()
+            completeStage()
+          }
+          setHandler(in,this)
+        }
+    }
+  */
 
   }
 
@@ -132,6 +201,7 @@ trait FDADataStream {
       new FDAStreamLoader[SOURCE, TARGET](slickProfile, converter)
   }
 }
+
 
 /**
   * for global imports

@@ -66,7 +66,7 @@ object UserDefinedTasks extends App {
     SELECT MEASUREID,STATENAME,COUNTYNAME,REPORTYEAR,VALUE FROM AIRQM
   """.as[(String,String,String,String,String)]
 
-  val streamAQMRaw: FDAPipeLine[FDAROW] = streamLoader.fda_typedStream(queryAQMRaw)(db)(512,512)()
+  val streamAQMRaw: FDAPipeLine[FDAROW] = streamLoader.fda_typedStream(queryAQMRaw)(db)(512,512)()()
 
 
   //filter out rows with inconvertible value strings and out of ranged value and year
@@ -128,7 +128,7 @@ object UserDefinedTasks extends App {
   implicit def toAQMRPT(row: AQMRPTTable#TableElementType) =
     AQMRPTModel(row.rid,row.mid,row.state,row.county,row.year,row.value,row.total,row.valid)
   val aqmrStreamLoader = FDAStreamLoader(slick.jdbc.H2Profile)(toAQMRPT _)
-  val aqmrStream: FDAPipeLine[FDAROW] = aqmrStreamLoader.fda_typedStream(orderedAQMRPT.result)(db)(512,512)()
+  val aqmrStream: FDAPipeLine[FDAROW] = aqmrStreamLoader.fda_typedStream(orderedAQMRPT.result)(db)(512,512)()()
   //user defined aggregator type.
   case class Accu(state: String, county: String, year: Int, count: Int, sumOfValue: Int)
   //user defined aggregation task
