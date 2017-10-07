@@ -7,16 +7,27 @@ package object funda {
   import fs2._
   import slick.dbio._
   import scala.concurrent.Future
+  import akka.stream.stage._
 
   implicit val fda_strategy = Strategy.fromFixedDaemonPool(4)
   implicit val fda_scheduler = Scheduler.fromFixedDaemonPool(4)
 
-  class Terminator {
+  class Fs2Terminator {
     var terminateNow = false
     def reset = terminateNow = false
-    def killNow = terminateNow = true
+    def stopASAP = terminateNow = true
   }
-  implicit object KillSwitch extends Terminator
+  implicit object Fs2KillSwitch extends Fs2Terminator
+
+  class AkkaTerminator{
+    var callback: AsyncCallback[Unit] = null
+    def stopASAP = {
+      if (callback != null) {
+        callback.invoke(())
+      }
+    }
+  }
+  implicit object AkkaKillSwitch extends AkkaTerminator
 
   /** 数据处理管道
     * a stream of data or action rows

@@ -4,13 +4,13 @@ import fs2._
 import play.api.libs.iteratee._
 import com.bayakala.funda._
 import slick.jdbc.JdbcProfile
-/*
+
 import akka.actor._
 import akka.stream.scaladsl._
 import akka.stream._
 import akka.stream.stage._
 import akka.stream.stage.{GraphStage, GraphStageLogic}
-*/
+
 /** stream loader class wrapper */
 trait FDADataStream {
 
@@ -51,7 +51,7 @@ trait FDADataStream {
       slickDB: Database)(
       fetchSize: Int, queSize: Int, take: Int = 0)(
       finalizer: => Unit = ())(
-        killSwitch: Terminator = KillSwitch)(
+        killSwitch: Fs2Terminator = Fs2KillSwitch)(
         implicit convert: SOURCE => TARGET)
       : FDAPipeLine[TARGET] = {
       val disableAutocommit = SimpleDBIO(_.connection.setAutoCommit(false))
@@ -66,12 +66,14 @@ trait FDADataStream {
       s.onFinalize(Task.delay(finalizer))
 
     }
-/*
+
     def fda_akkaTypedStream(action: DBIOAction[Iterable[SOURCE],Streaming[SOURCE],Effect.Read])(
       slickDB: Database)(
-                         fetchSize: Int, queSize: Int)(
-                         finalizer: => Unit = ())(
-                         implicit convert: SOURCE => TARGET): FDAPipeLine[TARGET] = {
+                             fetchSize: Int, queSize: Int, take: Int = 0)(
+                             finalizer: => Unit = ())(
+                             killSwitch: AkkaTerminator = AkkaKillSwitch)(
+                             implicit convert: SOURCE => TARGET)
+      : FDAPipeLine[TARGET] = {
       val disableAutocommit = SimpleDBIO(_.connection.setAutoCommit(false))
       val action_ = action.withStatementParameters(fetchSize = fetchSize)
       val publisher = slickDB.stream(disableAutocommit andThen action_)
@@ -81,15 +83,13 @@ trait FDADataStream {
       // construct akka source
       val akkaSource = Source.fromPublisher[SOURCE](publisher)
 
-      val s = Stream.eval(async.boundedQueue[Task,Option[SOURCE]](queSize)).flatMap { q =>
-        Task(akkaSource.to(new Fs2Gate[SOURCE](q)).run).unsafeRunAsyncFuture()
-        pipe.unNoneTerminate(q.dequeue).map {row => convert(row)}
-      }
-      s.onFinalize({
-        actorSys.terminate()
-        Task.delay(finalizer)
-      })
-    } */
+      val s = Stream.eval(async.boundedQueue[Task,Option[SOURCE]](2))
+        .flatMap { q =>
+          Task(akkaSource.to(new FS2Gate[SOURCE](killSwitch, take, q)).run).unsafeRunAsyncFuture  //enqueue Task(new thread)
+          pipe.unNoneTerminate(q.dequeue).map {row => convert(row)}      //dequeue in current thread
+        }
+      s.onFinalize{Task.delay{actorSys.terminate();finalizer}}
+    }
     /**
       * returns a reactive-stream from Slick DBIOAction result
       * using play-iteratees and fs2 queque to connect to slick data stream publisher
@@ -111,7 +111,7 @@ trait FDADataStream {
         slickDB: Database)(
                            fetchSize: Int, queSize: Int, take: Int = 0)(
                            finalizer: => Unit = ())(
-        implicit killSwitch: Terminator): FDAPipeLine[SOURCE] = {
+        implicit killSwitch: Fs2Terminator): FDAPipeLine[SOURCE] = {
       val disableAutocommit = SimpleDBIO(_.connection.setAutoCommit(false))
       val action_ = action.withStatementParameters(fetchSize = fetchSize)
       val publisher = slickDB.stream(disableAutocommit andThen action_)
@@ -124,6 +124,28 @@ trait FDADataStream {
       s.onFinalize(Task.delay(finalizer))
     }
 
+    def fda_akkaPlainStream(action: DBIOAction[Iterable[SOURCE],Streaming[SOURCE],Effect.Read])(
+      slickDB: Database)(
+                         fetchSize: Int, queSize: Int, take: Int = 0)(
+                         finalizer: => Unit = ())(
+                         implicit killSwitch: AkkaTerminator): FDAPipeLine[SOURCE] = {
+      val disableAutocommit = SimpleDBIO(_.connection.setAutoCommit(false))
+      val action_ = action.withStatementParameters(fetchSize = fetchSize)
+      val publisher = slickDB.stream(disableAutocommit andThen action_)
+      implicit val actorSys = ActorSystem("actor-system")
+      implicit val ec = actorSys.dispatcher
+      implicit val mat = ActorMaterializer()
+      // construct akka source
+      val akkaSource = Source.fromPublisher[SOURCE](publisher)
+
+      val s = Stream.eval(async.boundedQueue[Task,Option[SOURCE]](2))
+        .flatMap { q =>
+          Task(akkaSource.to(new FS2Gate[SOURCE](killSwitch, take, q)).run).unsafeRunAsyncFuture  //enqueue Task(new thread)
+          pipe.unNoneTerminate(q.dequeue)     //dequeue in current thread
+        }
+      s.onFinalize{Task.delay{actorSys.terminate();finalizer}}
+    }
+
     /**
       * consume input from enumerator by pushing each element into q queque
       * end and produce error when enqueque could not be completed in timeout
@@ -131,7 +153,7 @@ trait FDADataStream {
       * @tparam R         stream element type
       * @return           iteratee in new state
       */
-    private def pushData[R](killSwitch: Terminator, take: Int, q: async.mutable.Queue[Task,Option[R]]): Iteratee[R,Unit] = Cont {
+    private def pushData[R](killSwitch: Fs2Terminator, take: Int, q: async.mutable.Queue[Task,Option[R]]): Iteratee[R,Unit] = Cont {
        case Input.EOF =>
          q.enqueue1(None).unsafeRun
          Done((), Input.Empty)
@@ -147,21 +169,38 @@ trait FDADataStream {
            Done((), Input.Empty)
          }
     }
-/*
-    class Fs2Gate[T](q: fs2.async.mutable.Queue[Task,Option[T]]) extends GraphStage[SinkShape[T]] {
+    class FS2Gate[T](killSwitch: AkkaTerminator, take: Int, q: fs2.async.mutable.Queue[Task,Option[T]]) extends GraphStage[SinkShape[T]] {
       val in = Inlet[T]("inport")
       val shape = SinkShape.of(in)
 
       override def createLogic(inheritedAttributes: Attributes): GraphStageLogic =
         new GraphStageLogic(shape) with InHandler {
           override def preStart(): Unit = {
+            if (killSwitch != null) {
+              val callback = getAsyncCallback[Unit] { (_) =>
+                killStream = true
+              }
+              killSwitch.callback = callback
+            }
             pull(in)          //initiate stream elements movement
             super.preStart()
           }
-
+          var take_ = take
+          var killStream = false
           override def onPush(): Unit = {
-            q.enqueue1(Some(grab(in))).unsafeRun()
+            if (killStream) take_ = -1
+            q.enqueue1{
+              if ( take_ >= 0 )
+                Some(grab(in))
+              else
+                None
+            }.unsafeRun()
             pull(in)
+            if ( take_ < 0) completeStage()
+            if (take_ == 1)
+              take_ = -1
+            else
+              if (take_ != 0) take_ -= 1
           }
 
           override def onUpstreamFinish(): Unit = {
@@ -173,10 +212,11 @@ trait FDADataStream {
             q.enqueue1(None).unsafeRun()
             completeStage()
           }
+
           setHandler(in,this)
+
         }
     }
-  */
 
   }
 
