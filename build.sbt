@@ -35,6 +35,7 @@ lazy val root = (project in file("."))
       "ch.qos.logback" % "logback-classic" % "1.1.7",
       "co.fs2" %% "fs2-core" % "0.9.7",
       "co.fs2" %% "fs2-io" % "0.9.7",
+//      "com.typesafe.play" % "play-iteratees-reactive-streams_2.11" % "2.6.0",
       "com.typesafe.play" % "play-iteratees-reactive-streams_2.12" % "2.6.1",
       "com.typesafe.akka" %% "akka-actor" % "2.5.4",
       "com.typesafe.akka" %% "akka-stream" % "2.5.4"
