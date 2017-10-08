@@ -36,8 +36,8 @@ object StrongTypedSource extends App {
     }
   }
   // use stream combinators with field names
-  //aqmStream.filter{r => r.year > "1999"}.take(3).appendTask(showRecord).startRun
-/*
+  aqmStream.filter{r => r.year > "1999"}.take(3).appendTask(showRecord).startRun
+
   val allState = aqmraw.map(_.state)
   //no converter to help type inference. must provide type parameters explicitly
   val stateLoader = FDAViewLoader[String,String](slick.jdbc.H2Profile)()
@@ -66,7 +66,7 @@ object StrongTypedSource extends App {
   object killer extends Fs2Terminator
 
   val streamLoader = FDAStreamLoader(slick.jdbc.H2Profile)(toTypedRow _)
-  val streamSource = streamLoader.fda_typedStream(aqmQuery.result)(db)(512,512)()(killer)
+  val streamSource = streamLoader.fda_typedStream(aqmQuery.result)(db)(512,16)()(killer)
 //  streamSource.filter{r => r.year > "1999"}.appendTask(showRecord).startRun
   streamSource
        .map {row => row match {
@@ -85,16 +85,13 @@ object StrongTypedSource extends App {
   stateStreamSource.map{s => StateRow(s)}
     .filter{r => r.state > "Alabama"}.take(3)
     .appendTask(showState).startRun
-*/
 
   val akkaStreamLoader = FDAStreamLoader(slick.jdbc.H2Profile)(toTypedRow _)
   val akkaStreamSource = akkaStreamLoader.fda_akkaTypedStream(aqmQuery.result)(db)(512,512,30)()()
   akkaStreamSource     //.filter{r => r.year > "1999"}
     .appendTask(showRecord).startRun
 
-  println("_________________________")
-
-  val akkaStreamSource2 = akkaStreamLoader.fda_akkaTypedStream(aqmQuery.result)(db)(512,512,30)()()
+  val akkaStreamSource2 = akkaStreamLoader.fda_akkaTypedStream(aqmQuery.result)(db)(512,1)()()
   akkaStreamSource2
     .map {row => row match {
     case qmr: TypedRow if (qmr.value.toString == "5") =>

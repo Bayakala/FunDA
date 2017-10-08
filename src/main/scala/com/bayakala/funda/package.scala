@@ -12,13 +12,24 @@ package object funda {
   implicit val fda_strategy = Strategy.fromFixedDaemonPool(4)
   implicit val fda_scheduler = Scheduler.fromFixedDaemonPool(4)
 
+  /** fs2 manned halt type
+    * terminateNow indicates to FDADataStream.pushData intent to stop
+    * anytime now during enqueue process
+    */
   class Fs2Terminator {
     var terminateNow = false
     def reset = terminateNow = false
     def stopASAP = terminateNow = true
   }
+  /** default killswitch for fs2
+    * declare separate instances for multiple concurrent running stream control
+    * by providing explicitly killSwitch parameter
+    */
   implicit object Fs2KillSwitch extends Fs2Terminator
-
+  /** akka manned halt type
+    * terminateNow indicates to FDADataStream.Fs2Gate intent to stop
+    * anytime now during enqueue process
+    */
   class AkkaTerminator{
     var callback: AsyncCallback[Unit] = null
     def stopASAP = {
@@ -27,6 +38,10 @@ package object funda {
       }
     }
   }
+  /** default killswitch for akka
+    * declare separate instances for multiple concurrent running stream control
+    * by providing explicitly killSwitch parameter
+    */
   implicit object AkkaKillSwitch extends AkkaTerminator
 
   /** 数据处理管道

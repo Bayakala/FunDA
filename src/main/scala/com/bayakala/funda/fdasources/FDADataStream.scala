@@ -33,15 +33,17 @@ trait FDADataStream {
       * also provide stream element conversion from SOURCE type to TARGET type
       * @example {{{
       *    val streamLoader = FDAStreamLoader(slick.jdbc.H2Profile)(toTypedRow _)
-      *    val streamSource = streamLoader.fda_typedStream(aqmQuery.result)(db)(512,512)()
-      *    val safeStreamSource = streamLoader.fda_typedStream(aqmQuery.result)(db)(512,512)(
-      *        println("the end finally!"))
+      *    val streamSource = streamLoader.fda_typedStream(aqmQuery.result)(db)(512,16,100)()()
+      *    val safeStreamSource = streamLoader.fda_typedStream(aqmQuery.result)(db)(512,16)(
+      *        println("the end finally!"))(killSwitch)
       * }}}
       * @param action       a Slick DBIOAction to produce query results
       * @param slickDB      Slick database object
       * @param fetchSize    number of rows cached during database read
       * @param queSize      size of queque used by iteratee as cache to pass elements to fs2 stream
+      * @param take         take first 'take' elements
       * @param finalizer    cleanup callback
+      * @param killSwitch   use killSwitch.stopASAP to halt stream
       * @param convert      just a measure to guarantee conversion function is defined
       *                     when this function is used there has to be a converter defined
       *                     implicitly in compile time
@@ -66,7 +68,28 @@ trait FDADataStream {
       s.onFinalize(Task.delay(finalizer))
 
     }
-
+    /**
+      * returns a reactive-stream from Slick DBIOAction result
+      * using akka-stream to connect to slick data stream publisher
+      * provide facade for error handler and finalizer to support exception and cleanup handling
+      * @example {{{
+      *    val streamLoader = FDAStreamLoader(slick.jdbc.H2Profile)(toTypedRow _)
+      *    val streamSource = streamLoader.fda_akkaTypedStream(aqmQuery.result)(db)(512,2,100)()()
+      *    val safeStreamSource = streamLoader.fda_akkaTypedStream(aqmQuery.result)(db)(512,2)(
+      *        println("the end finally!"))(killSwitch)
+      * }}}
+      * @param action       a Slick DBIOAction to produce query results
+      * @param slickDB      Slick database object
+      * @param fetchSize    number of rows cached during database read
+      * @param queSize      size of queque used akka-stream as cache to pass elements to fs2 queue
+      * @param take         take first 'take' elements
+      * @param finalizer    cleanup callback
+      * @param killSwitch   use killSwitch.stopASAP to halt stream
+      * @param convert      just a measure to guarantee conversion function is defined
+      *                     when this function is used there has to be a converter defined
+      *                     implicitly in compile time
+      * @return             a reactive-stream of SOURCE row type elements
+      */
     def fda_akkaTypedStream(action: DBIOAction[Iterable[SOURCE],Streaming[SOURCE],Effect.Read])(
       slickDB: Database)(
                              fetchSize: Int, queSize: Int, take: Int = 0)(
@@ -83,7 +106,7 @@ trait FDADataStream {
       // construct akka source
       val akkaSource = Source.fromPublisher[SOURCE](publisher)
 
-      val s = Stream.eval(async.boundedQueue[Task,Option[SOURCE]](2))
+      val s = Stream.eval(async.boundedQueue[Task,Option[SOURCE]](queSize))
         .flatMap { q =>
           Task(akkaSource.to(new FS2Gate[SOURCE](killSwitch, take, q)).run).unsafeRunAsyncFuture  //enqueue Task(new thread)
           pipe.unNoneTerminate(q.dequeue).map {row => convert(row)}      //dequeue in current thread
@@ -96,15 +119,17 @@ trait FDADataStream {
       * provide facade for error handler and finalizer to support exception and cleanup handling
       * @example {{{
       *    val streamLoader = FDAStreamLoader(slick.jdbc.H2Profile)()
-      *    val streamSource = streamLoader.fda_plainStream(aqmQuery.result)(db)(512,512)()
-      *    val safeStreamSource = streamLoader.fda_plainStream(aqmQuery.result)(db)(512,512)(
-      *        println("the end finally!"))
+      *    val streamSource = streamLoader.fda_plainStream(aqmQuery.result)(db)(512,16, 100)()()
+      *    val safeStreamSource = streamLoader.fda_plainStream(aqmQuery.result)(db)(512,16)(
+      *        println("the end finally!"))(killSwitch)
       * }}}
       * @param action       a Slick DBIOAction to produce query results
       * @param slickDB      Slick database object
       * @param fetchSize    number of rows cached during database read
       * @param queSize      size of queque used by iteratee as cache to pass elements to fs2 stream
+      * @param take         take first 'take' elements
       * @param finalizer    cleanup callback
+      * @param killSwitch   use killSwitch.stopASAP to halt stream
       * @return             a reactive-stream of SOURCE row type elements
       */
     def fda_plainStream(action: DBIOAction[Iterable[SOURCE],Streaming[SOURCE],Effect.Read])(
@@ -123,7 +148,25 @@ trait FDADataStream {
       }
       s.onFinalize(Task.delay(finalizer))
     }
-
+    /**
+      * returns a reactive-stream from Slick DBIOAction result
+      * using akka-stream to connect to slick data stream publisher
+      * provide facade for error handler and finalizer to support exception and cleanup handling
+      * @example {{{
+      *    val streamLoader = FDAStreamLoader(slick.jdbc.H2Profile)()
+      *    val streamSource = streamLoader.fda_akkaPlainStream(aqmQuery.result)(db)(512,2,100)()()
+      *    val safeStreamSource = streamLoader.fda_plainStream(aqmQuery.result)(db)(512,2)(
+      *        println("the end finally!"))(killSwitch)
+      * }}}
+      * @param action       a Slick DBIOAction to produce query results
+      * @param slickDB      Slick database object
+      * @param fetchSize    number of rows cached during database read
+      * @param queSize      size of queque used akka-stream as cache to pass elements to fs2 queue
+      * @param take         take first 'take' elements
+      * @param finalizer    cleanup callback
+      * @param killSwitch   use killSwitch.stopASAP to halt stream
+      * @return             a reactive-stream of SOURCE row type elements
+      */
     def fda_akkaPlainStream(action: DBIOAction[Iterable[SOURCE],Streaming[SOURCE],Effect.Read])(
       slickDB: Database)(
                          fetchSize: Int, queSize: Int, take: Int = 0)(
@@ -138,7 +181,7 @@ trait FDADataStream {
       // construct akka source
       val akkaSource = Source.fromPublisher[SOURCE](publisher)
 
-      val s = Stream.eval(async.boundedQueue[Task,Option[SOURCE]](2))
+      val s = Stream.eval(async.boundedQueue[Task,Option[SOURCE]](queSize))
         .flatMap { q =>
           Task(akkaSource.to(new FS2Gate[SOURCE](killSwitch, take, q)).run).unsafeRunAsyncFuture  //enqueue Task(new thread)
           pipe.unNoneTerminate(q.dequeue)     //dequeue in current thread
@@ -149,9 +192,11 @@ trait FDADataStream {
     /**
       * consume input from enumerator by pushing each element into q queque
       * end and produce error when enqueque could not be completed in timeout
-      * @param q          queque for cache purpose
-      * @tparam R         stream element type
-      * @return           iteratee in new state
+      * @tparam R           stream element type
+      * @param killSwitch   object with killSwitch.stopASAP to halt stream
+      * @param take         emit the first 'take' elements
+      * @param q            queque for cache purpose
+      * @return             iteratee in new state
       */
     private def pushData[R](killSwitch: Fs2Terminator, take: Int, q: async.mutable.Queue[Task,Option[R]]): Iteratee[R,Unit] = Cont {
        case Input.EOF =>
@@ -169,7 +214,18 @@ trait FDADataStream {
            Done((), Input.Empty)
          }
     }
-    class FS2Gate[T](killSwitch: AkkaTerminator, take: Int, q: fs2.async.mutable.Queue[Task,Option[T]]) extends GraphStage[SinkShape[T]] {
+    /**
+      * an akka-stream graph stage that connects akka-stream-source to fs2 flow through
+      * ffs2.async.mutable.Queue structure
+      * acts as a de-backpressurer to adjust emit rate to pull-model stream fs2
+      * also takes care of manual halt and limiting first batch of element emission
+      * @tparam T           stream element type
+      * @param killSwitch   object with killSwitch.stopASAP to halt stream
+      * @param take         emit the first 'take' elements
+      * @param q            queque for cache purpose
+      * @return             iteratee in new state
+      */
+    private class FS2Gate[T](killSwitch: AkkaTerminator, take: Int, q: fs2.async.mutable.Queue[Task,Option[T]]) extends GraphStage[SinkShape[T]] {
       val in = Inlet[T]("inport")
       val shape = SinkShape.of(in)
 
